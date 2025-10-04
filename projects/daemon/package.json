@@ -1,0 +1,24 @@
+{
+  "name": "daemon",
+  "version": "1.0.0",
+  "description": "Daemon",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "npx tsc && node --env-file=.env dist/daemon/src/index.js",
+    "format": "prettier --write .",
+    "build": "npx tsc",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "generate-keypair": "npx ts-node scripts/generate-keypair.ts"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^24.6.2",
+    "prettier": "^3.6.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@algorandfoundation/algokit-utils": "^9.1.2",
+    "algosdk": "^3.5.2"
+  }
+}

@@ -1,0 +1,729 @@
+{
+  "version": 3,
+  "sources": [
+    "/Users/blairmcilroy/Projects/algorand/red-labs/randomness-beacon/projects/randomness-beacon/smart_contracts/randomness_beacon/contracts/pausable.algo.ts"
+  ],
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;AAOS;AACiC;;AAFxC;AAMuC;AAAwB;AAA/D;AAPF;;AAAA;;;AAAA;;;;;;;;;;;;;;;;;;;;;;AAAA;;;AAAA;;;;;;;;;;AAAA;;AA4CG;;AAAA;AAAA;AAAA;;AAAA;AAAA;;;AAAA;;;;;;AAAA;AAAA;AAAA;AAAA;;AAbD;;AAAA;AAAA;AAAA;;AAAA;AA/BF;;;AA+BE;;;AAAA;;AANA;;AAAA;AAAA;AAAA;;AAAA;AAAA;;;AAAA;;AARA;;AAAA;AAAA;AAAA;;AAAA;AAAA;;;AAAA;;AAjBF;;AAAA;;;AAAA;;AAAA;AAAA;AAAA;;AAES;AAAA;AAAA;AAAA;AAYoC;;AAAlC;AAAP;;AAIA;;;AAXqC;AAajB;;;AAApB;;AAMA;;;AAnBqC;AAqBjB;AAApB;;AAGF;;;AACE;;;AAEO;;AAA6B;;AAA7B;AAAP;AAhCK;AAiCL;;AAAA;;AAjCK;AAAA;AAAA;AAAA;AA4CL",
+  "op_pc_offset": 0,
+  "pc_events": {
+    "1": {
+      "subroutine": "@algorandfoundation/algorand-typescript/arc4/index.d.ts::Contract.approvalProgram",
+      "params": {},
+      "block": "main",
+      "stack_in": [],
+      "op": "intcblock 1 0"
+    },
+    "5": {
+      "op": "bytecblock \"pauser\" \"paused\" 0x00"
+    },
+    "23": {
+      "op": "txn ApplicationID",
+      "defined_out": [
+        "reinterpret_bool%0#0"
+      ],
+      "stack_out": [
+        "reinterpret_bool%0#0"
+      ]
+    },
+    "25": {
+      "op": "bnz main_after_if_else@2",
+      "stack_out": []
+    },
+    "28": {
+      "op": "bytec_0 // \"pauser\"",
+      "defined_out": [
+        "\"pauser\""
+      ],
+      "stack_out": [
+        "\"pauser\""
+      ]
+    },
+    "29": {
+      "op": "global CreatorAddress",
+      "defined_out": [
+        "\"pauser\"",
+        "new_state_value%0#0"
+      ],
+      "stack_out": [
+        "\"pauser\"",
+        "new_state_value%0#0"
+      ]
+    },
+    "31": {
+      "op": "app_global_put",
+      "stack_out": []
+    },
+    "32": {
+      "op": "bytec_1 // \"paused\"",
+      "defined_out": [
+        "\"paused\""
+      ],
+      "stack_out": [
+        "\"paused\""
+      ]
+    },
+    "33": {
+      "op": "bytec_2 // 0x00",
+      "defined_out": [
+        "\"paused\"",
+        "0x00"
+      ],
+      "stack_out": [
+        "\"paused\"",
+        "0x00"
+      ]
+    },
+    "34": {
+      "op": "app_global_put",
+      "stack_out": []
+    },
+    "35": {
+      "block": "main_after_if_else@2",
+      "stack_in": [],
+      "op": "txn NumAppArgs",
+      "defined_out": [
+        "tmp%0#1"
+      ],
+      "stack_out": [
+        "tmp%0#1"
+      ]
+    },
+    "37": {
+      "op": "bz main_bare_routing@11",
+      "stack_out": []
+    },
+    "40": {
+      "op": "pushbytess 0x0178f94b 0x1b529de8 0x0cadd163 0xb0d953b3 // method \"pause()void\", method \"unpause()void\", method \"updatePauser(address)void\", method \"pauser()address\"",
+      "defined_out": [
+        "Method(pause()void)",
+        "Method(pauser()address)",
+        "Method(unpause()void)",
+        "Method(updatePauser(address)void)"
+      ],
+      "stack_out": [
+        "Method(pause()void)",
+        "Method(unpause()void)",
+        "Method(updatePauser(address)void)",
+        "Method(pauser()address)"
+      ]
+    },
+    "62": {
+      "op": "txna ApplicationArgs 0",
+      "defined_out": [
+        "Method(pause()void)",
+        "Method(pauser()address)",
+        "Method(unpause()void)",
+        "Method(updatePauser(address)void)",
+        "tmp%2#0"
+      ],
+      "stack_out": [
+        "Method(pause()void)",
+        "Method(unpause()void)",
+        "Method(updatePauser(address)void)",
+        "Method(pauser()address)",
+        "tmp%2#0"
+      ]
+    },
+    "65": {
+      "op": "match main_pause_route@5 main_unpause_route@6 main_updatePauser_route@7 main_pauser_route@8",
+      "stack_out": []
+    },
+    "75": {
+      "block": "main_after_if_else@15",
+      "stack_in": [],
+      "op": "intc_1 // 0",
+      "defined_out": [
+        "tmp%0#0"
+      ],
+      "stack_out": [
+        "tmp%0#0"
+      ]
+    },
+    "76": {
+      "op": "return",
+      "stack_out": []
+    },
+    "77": {
+      "block": "main_pauser_route@8",
+      "stack_in": [],
+      "op": "txn OnCompletion",
+      "defined_out": [
+        "tmp%15#0"
+      ],
+      "stack_out": [
+        "tmp%15#0"
+      ]
+    },
+    "79": {
+      "op": "!",
+      "defined_out": [
+        "tmp%16#0"
+      ],
+      "stack_out": [
+        "tmp%16#0"
+      ]
+    },
+    "80": {
+      "error": "OnCompletion is not NoOp",
+      "op": "assert // OnCompletion is not NoOp",
+      "stack_out": []
+    },
+    "81": {
+      "op": "txn ApplicationID",
+      "defined_out": [
+        "tmp%17#0"
+      ],
+      "stack_out": [
+        "tmp%17#0"
+      ]
+    },
+    "83": {
+      "error": "can only call when not creating",
+      "op": "assert // can only call when not creating",
+      "stack_out": []
+    },
+    "84": {
+      "callsub": "smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.pauser",
+      "op": "callsub pauser",
+      "defined_out": [
+        "tmp%19#0"
+      ],
+      "stack_out": [
+        "tmp%19#0"
+      ]
+    },
+    "87": {
+      "op": "pushbytes 0x151f7c75",
+      "defined_out": [
+        "0x151f7c75",
+        "tmp%19#0"
+      ],
+      "stack_out": [
+        "tmp%19#0",
+        "0x151f7c75"
+      ]
+    },
+    "93": {
+      "op": "swap",
+      "stack_out": [
+        "0x151f7c75",
+        "tmp%19#0"
+      ]
+    },
+    "94": {
+      "op": "concat",
+      "defined_out": [
+        "tmp%20#0"
+      ],
+      "stack_out": [
+        "tmp%20#0"
+      ]
+    },
+    "95": {
+      "op": "log",
+      "stack_out": []
+    },
+    "96": {
+      "op": "intc_0 // 1",
+      "defined_out": [
+        "tmp%0#0"
+      ],
+      "stack_out": [
+        "tmp%0#0"
+      ]
+    },
+    "97": {
+      "op": "return",
+      "stack_out": []
+    },
+    "98": {
+      "block": "main_updatePauser_route@7",
+      "stack_in": [],
+      "op": "txn OnCompletion",
+      "defined_out": [
+        "tmp%11#0"
+      ],
+      "stack_out": [
+        "tmp%11#0"
+      ]
+    },
+    "100": {
+      "op": "!",
+      "defined_out": [
+        "tmp%12#0"
+      ],
+      "stack_out": [
+        "tmp%12#0"
+      ]
+    },
+    "101": {
+      "error": "OnCompletion is not NoOp",
+      "op": "assert // OnCompletion is not NoOp",
+      "stack_out": []
+    },
+    "102": {
+      "op": "txn ApplicationID",
+      "defined_out": [
+        "tmp%13#0"
+      ],
+      "stack_out": [
+        "tmp%13#0"
+      ]
+    },
+    "104": {
+      "error": "can only call when not creating",
+      "op": "assert // can only call when not creating",
+      "stack_out": []
+    },
+    "105": {
+      "op": "txna ApplicationArgs 1",
+      "defined_out": [
+        "reinterpret_bytes[32]%0#0"
+      ],
+      "stack_out": [
+        "reinterpret_bytes[32]%0#0"
+      ]
+    },
+    "108": {
+      "callsub": "smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.updatePauser",
+      "op": "callsub updatePauser",
+      "stack_out": []
+    },
+    "111": {
+      "op": "intc_0 // 1",
+      "defined_out": [
+        "tmp%0#0"
+      ],
+      "stack_out": [
+        "tmp%0#0"
+      ]
+    },
+    "112": {
+      "op": "return",
+      "stack_out": []
+    },
+    "113": {
+      "block": "main_unpause_route@6",
+      "stack_in": [],
+      "op": "txn OnCompletion",
+      "defined_out": [
+        "tmp%7#0"
+      ],
+      "stack_out": [
+        "tmp%7#0"
+      ]
+    },
+    "115": {
+      "op": "!",
+      "defined_out": [
+        "tmp%8#0"
+      ],
+      "stack_out": [
+        "tmp%8#0"
+      ]
+    },
+    "116": {
+      "error": "OnCompletion is not NoOp",
+      "op": "assert // OnCompletion is not NoOp",
+      "stack_out": []
+    },
+    "117": {
+      "op": "txn ApplicationID",
+      "defined_out": [
+        "tmp%9#0"
+      ],
+      "stack_out": [
+        "tmp%9#0"
+      ]
+    },
+    "119": {
+      "error": "can only call when not creating",
+      "op": "assert // can only call when not creating",
+      "stack_out": []
+    },
+    "120": {
+      "callsub": "smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.unpause",
+      "op": "callsub unpause"
+    },
+    "123": {
+      "op": "intc_0 // 1",
+      "defined_out": [
+        "tmp%0#0"
+      ],
+      "stack_out": [
+        "tmp%0#0"
+      ]
+    },
+    "124": {
+      "op": "return",
+      "stack_out": []
+    },
+    "125": {
+      "block": "main_pause_route@5",
+      "stack_in": [],
+      "op": "txn OnCompletion",
+      "defined_out": [
+        "tmp%3#0"
+      ],
+      "stack_out": [
+        "tmp%3#0"
+      ]
+    },
+    "127": {
+      "op": "!",
+      "defined_out": [
+        "tmp%4#0"
+      ],
+      "stack_out": [
+        "tmp%4#0"
+      ]
+    },
+    "128": {
+      "error": "OnCompletion is not NoOp",
+      "op": "assert // OnCompletion is not NoOp",
+      "stack_out": []
+    },
+    "129": {
+      "op": "txn ApplicationID",
+      "defined_out": [
+        "tmp%5#0"
+      ],
+      "stack_out": [
+        "tmp%5#0"
+      ]
+    },
+    "131": {
+      "error": "can only call when not creating",
+      "op": "assert // can only call when not creating",
+      "stack_out": []
+    },
+    "132": {
+      "callsub": "smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.pause",
+      "op": "callsub pause"
+    },
+    "135": {
+      "op": "intc_0 // 1",
+      "defined_out": [
+        "tmp%0#0"
+      ],
+      "stack_out": [
+        "tmp%0#0"
+      ]
+    },
+    "136": {
+      "op": "return",
+      "stack_out": []
+    },
+    "137": {
+      "block": "main_bare_routing@11",
+      "stack_in": [],
+      "op": "txn OnCompletion",
+      "defined_out": [
+        "tmp%21#0"
+      ],
+      "stack_out": [
+        "tmp%21#0"
+      ]
+    },
+    "139": {
+      "op": "bnz main_after_if_else@15",
+      "stack_out": []
+    },
+    "142": {
+      "op": "txn ApplicationID",
+      "defined_out": [
+        "tmp%22#0"
+      ],
+      "stack_out": [
+        "tmp%22#0"
+      ]
+    },
+    "144": {
+      "op": "!",
+      "defined_out": [
+        "tmp%23#0"
+      ],
+      "stack_out": [
+        "tmp%23#0"
+      ]
+    },
+    "145": {
+      "error": "can only call when creating",
+      "op": "assert // can only call when creating",
+      "stack_out": []
+    },
+    "146": {
+      "op": "intc_0 // 1",
+      "defined_out": [
+        "tmp%0#0"
+      ],
+      "stack_out": [
+        "tmp%0#0"
+      ]
+    },
+    "147": {
+      "op": "return",
+      "stack_out": []
+    },
+    "148": {
+      "subroutine": "smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.onlyPauser",
+      "params": {},
+      "block": "onlyPauser",
+      "stack_in": [],
+      "op": "intc_1 // 0",
+      "defined_out": [
+        "0"
+      ],
+      "stack_out": [
+        "0"
+      ]
+    },
+    "149": {
+      "op": "bytec_0 // \"pauser\"",
+      "defined_out": [
+        "\"pauser\"",
+        "0"
+      ],
+      "stack_out": [
+        "0",
+        "\"pauser\""
+      ]
+    },
+    "150": {
+      "op": "app_global_get_ex",
+      "defined_out": [
+        "maybe_exists%0#0",
+        "maybe_value%0#0"
+      ],
+      "stack_out": [
+        "maybe_value%0#0",
+        "maybe_exists%0#0"
+      ]
+    },
+    "151": {
+      "error": "check GlobalState exists",
+      "op": "assert // check GlobalState exists",
+      "stack_out": [
+        "maybe_value%0#0"
+      ]
+    },
+    "152": {
+      "op": "txn Sender",
+      "defined_out": [
+        "maybe_value%0#0",
+        "tmp%0#0"
+      ],
+      "stack_out": [
+        "maybe_value%0#0",
+        "tmp%0#0"
+      ]
+    },
+    "154": {
+      "op": "==",
+      "defined_out": [
+        "tmp%1#0"
+      ],
+      "stack_out": [
+        "tmp%1#0"
+      ]
+    },
+    "155": {
+      "error": "only pauser can call this method",
+      "op": "assert // only pauser can call this method",
+      "stack_out": []
+    },
+    "156": {
+      "retsub": true,
+      "op": "retsub"
+    },
+    "157": {
+      "subroutine": "smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.pause",
+      "params": {},
+      "block": "pause",
+      "stack_in": [],
+      "callsub": "smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.onlyPauser",
+      "op": "callsub onlyPauser"
+    },
+    "160": {
+      "op": "bytec_1 // \"paused\"",
+      "defined_out": [
+        "\"paused\""
+      ],
+      "stack_out": [
+        "\"paused\""
+      ]
+    },
+    "161": {
+      "op": "pushbytes 0x80",
+      "defined_out": [
+        "\"paused\"",
+        "0x80"
+      ],
+      "stack_out": [
+        "\"paused\"",
+        "0x80"
+      ]
+    },
+    "164": {
+      "op": "app_global_put",
+      "stack_out": []
+    },
+    "165": {
+      "retsub": true,
+      "op": "retsub"
+    },
+    "166": {
+      "subroutine": "smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.unpause",
+      "params": {},
+      "block": "unpause",
+      "stack_in": [],
+      "callsub": "smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.onlyPauser",
+      "op": "callsub onlyPauser"
+    },
+    "169": {
+      "op": "bytec_1 // \"paused\"",
+      "defined_out": [
+        "\"paused\""
+      ],
+      "stack_out": [
+        "\"paused\""
+      ]
+    },
+    "170": {
+      "op": "bytec_2 // 0x00",
+      "defined_out": [
+        "\"paused\"",
+        "0x00"
+      ],
+      "stack_out": [
+        "\"paused\"",
+        "0x00"
+      ]
+    },
+    "171": {
+      "op": "app_global_put",
+      "stack_out": []
+    },
+    "172": {
+      "retsub": true,
+      "op": "retsub"
+    },
+    "173": {
+      "subroutine": "smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.updatePauser",
+      "params": {
+        "_newPauser#0": "bytes"
+      },
+      "block": "updatePauser",
+      "stack_in": [],
+      "op": "proto 1 0"
+    },
+    "176": {
+      "callsub": "smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.onlyPauser",
+      "op": "callsub onlyPauser"
+    },
+    "179": {
+      "op": "frame_dig -1",
+      "defined_out": [
+        "_newPauser#0 (copy)"
+      ],
+      "stack_out": [
+        "_newPauser#0 (copy)"
+      ]
+    },
+    "181": {
+      "op": "global ZeroAddress",
+      "defined_out": [
+        "_newPauser#0 (copy)",
+        "tmp%0#0"
+      ],
+      "stack_out": [
+        "_newPauser#0 (copy)",
+        "tmp%0#0"
+      ]
+    },
+    "183": {
+      "op": "!=",
+      "defined_out": [
+        "tmp%1#0"
+      ],
+      "stack_out": [
+        "tmp%1#0"
+      ]
+    },
+    "184": {
+      "error": "pauser cannot be zero address",
+      "op": "assert // pauser cannot be zero address",
+      "stack_out": []
+    },
+    "185": {
+      "op": "bytec_0 // \"pauser\"",
+      "defined_out": [
+        "\"pauser\""
+      ],
+      "stack_out": [
+        "\"pauser\""
+      ]
+    },
+    "186": {
+      "op": "frame_dig -1",
+      "stack_out": [
+        "\"pauser\"",
+        "_newPauser#0 (copy)"
+      ]
+    },
+    "188": {
+      "op": "app_global_put",
+      "stack_out": []
+    },
+    "189": {
+      "retsub": true,
+      "op": "retsub"
+    },
+    "190": {
+      "subroutine": "smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.pauser",
+      "params": {},
+      "block": "pauser",
+      "stack_in": [],
+      "op": "intc_1 // 0",
+      "defined_out": [
+        "0"
+      ],
+      "stack_out": [
+        "0"
+      ]
+    },
+    "191": {
+      "op": "bytec_0 // \"pauser\"",
+      "defined_out": [
+        "\"pauser\"",
+        "0"
+      ],
+      "stack_out": [
+        "0",
+        "\"pauser\""
+      ]
+    },
+    "192": {
+      "op": "app_global_get_ex",
+      "defined_out": [
+        "maybe_exists%0#0",
+        "maybe_value%0#0"
+      ],
+      "stack_out": [
+        "maybe_value%0#0",
+        "maybe_exists%0#0"
+      ]
+    },
+    "193": {
+      "error": "check GlobalState exists",
+      "op": "assert // check GlobalState exists",
+      "stack_out": [
+        "maybe_value%0#0"
+      ]
+    },
+    "194": {
+      "retsub": true,
+      "op": "retsub"
+    }
+  }
+}

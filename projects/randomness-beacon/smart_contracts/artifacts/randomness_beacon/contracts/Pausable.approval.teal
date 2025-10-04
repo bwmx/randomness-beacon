@@ -1,0 +1,192 @@
+#pragma version 10
+#pragma typetrack false
+
+// @algorandfoundation/algorand-typescript/arc4/index.d.ts::Contract.approvalProgram() -> uint64:
+main:
+    intcblock 1 0
+    bytecblock "pauser" "paused" 0x00
+    txn ApplicationID
+    bnz main_after_if_else@2
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:8
+    // key: 'pauser',
+    bytec_0 // "pauser"
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:9
+    // initialValue: new arc4.Address(Global.creatorAddress),
+    global CreatorAddress
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:7-10
+    // private _pauser = GlobalState<arc4.Address>({
+    //   key: 'pauser',
+    //   initialValue: new arc4.Address(Global.creatorAddress),
+    // })
+    app_global_put
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:13
+    // paused = GlobalState<arc4.Bool>({ key: 'paused', initialValue: new arc4.Bool(false) })
+    bytec_1 // "paused"
+    bytec_2 // 0x00
+    app_global_put
+
+main_after_if_else@2:
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:6
+    // export class Pausable extends Contract {
+    txn NumAppArgs
+    bz main_bare_routing@11
+    pushbytess 0x0178f94b 0x1b529de8 0x0cadd163 0xb0d953b3 // method "pause()void", method "unpause()void", method "updatePauser(address)void", method "pauser()address"
+    txna ApplicationArgs 0
+    match main_pause_route@5 main_unpause_route@6 main_updatePauser_route@7 main_pauser_route@8
+
+main_after_if_else@15:
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:6
+    // export class Pausable extends Contract {
+    intc_1 // 0
+    return
+
+main_pauser_route@8:
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:50
+    // @arc4.abimethod({ readonly: true })
+    txn OnCompletion
+    !
+    assert // OnCompletion is not NoOp
+    txn ApplicationID
+    assert // can only call when not creating
+    callsub pauser
+    pushbytes 0x151f7c75
+    swap
+    concat
+    log
+    intc_0 // 1
+    return
+
+main_updatePauser_route@7:
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:37
+    // updatePauser(_newPauser: arc4.Address): void {
+    txn OnCompletion
+    !
+    assert // OnCompletion is not NoOp
+    txn ApplicationID
+    assert // can only call when not creating
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:6
+    // export class Pausable extends Contract {
+    txna ApplicationArgs 1
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:37
+    // updatePauser(_newPauser: arc4.Address): void {
+    callsub updatePauser
+    intc_0 // 1
+    return
+
+main_unpause_route@6:
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:31
+    // unpause(): void {
+    txn OnCompletion
+    !
+    assert // OnCompletion is not NoOp
+    txn ApplicationID
+    assert // can only call when not creating
+    callsub unpause
+    intc_0 // 1
+    return
+
+main_pause_route@5:
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:23
+    // pause(): void {
+    txn OnCompletion
+    !
+    assert // OnCompletion is not NoOp
+    txn ApplicationID
+    assert // can only call when not creating
+    callsub pause
+    intc_0 // 1
+    return
+
+main_bare_routing@11:
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:6
+    // export class Pausable extends Contract {
+    txn OnCompletion
+    bnz main_after_if_else@15
+    txn ApplicationID
+    !
+    assert // can only call when creating
+    intc_0 // 1
+    return
+
+
+// smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.onlyPauser() -> void:
+onlyPauser:
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:8
+    // key: 'pauser',
+    intc_1 // 0
+    bytec_0 // "pauser"
+    app_global_get_ex
+    assert // check GlobalState exists
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:20
+    // assert(this._pauser.value.native === Txn.sender, ERR_ONLY_PAUSER)
+    txn Sender
+    ==
+    assert // only pauser can call this method
+    retsub
+
+
+// smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.pause() -> void:
+pause:
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:24
+    // this.onlyPauser()
+    callsub onlyPauser
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:13
+    // paused = GlobalState<arc4.Bool>({ key: 'paused', initialValue: new arc4.Bool(false) })
+    bytec_1 // "paused"
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:26
+    // this.paused.value = new arc4.Bool(true)
+    pushbytes 0x80
+    app_global_put
+    retsub
+
+
+// smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.unpause() -> void:
+unpause:
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:32
+    // this.onlyPauser()
+    callsub onlyPauser
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:13
+    // paused = GlobalState<arc4.Bool>({ key: 'paused', initialValue: new arc4.Bool(false) })
+    bytec_1 // "paused"
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:34
+    // this.paused.value = new arc4.Bool(false)
+    bytec_2 // 0x00
+    app_global_put
+    retsub
+
+
+// smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.updatePauser(_newPauser: bytes) -> void:
+updatePauser:
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:37
+    // updatePauser(_newPauser: arc4.Address): void {
+    proto 1 0
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:38
+    // this.onlyPauser()
+    callsub onlyPauser
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:40
+    // assert(_newPauser.native !== Global.zeroAddress, ERR_ZERO_ADDRESS)
+    frame_dig -1
+    global ZeroAddress
+    !=
+    assert // pauser cannot be zero address
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:8
+    // key: 'pauser',
+    bytec_0 // "pauser"
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:41
+    // this._pauser.value = _newPauser
+    frame_dig -1
+    app_global_put
+    retsub
+
+
+// smart_contracts/randomness_beacon/contracts/pausable.algo.ts::Pausable.pauser() -> bytes:
+pauser:
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:8
+    // key: 'pauser',
+    intc_1 // 0
+    bytec_0 // "pauser"
+    app_global_get_ex
+    assert // check GlobalState exists
+    // smart_contracts/randomness_beacon/contracts/pausable.algo.ts:52
+    // return this._pauser.value
+    retsub

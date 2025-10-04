@@ -1,0 +1,8 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: 0.3.5
+_src_path: gh:algorandfoundation/algokit-typescript-template
+author_email: blairmcilroy@icloud.com
+author_name: bwmx
+contract_name: randomness_beacon
+preset_name: production
+project_name: randomness-beacon

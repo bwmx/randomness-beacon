@@ -1,0 +1,160 @@
+#pragma version 10
+#pragma typetrack false
+
+// @algorandfoundation/algorand-typescript/arc4/index.d.ts::Contract.approvalProgram() -> uint64:
+main:
+    intcblock 1 0
+    bytecblock "manager"
+    txn ApplicationID
+    bnz main_after_if_else@2
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:15
+    // key: 'manager',
+    bytec_0 // "manager"
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:16
+    // initialValue: new arc4.Address(Global.creatorAddress),
+    global CreatorAddress
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:14-17
+    // private _manager = GlobalState<arc4.Address>({
+    //   key: 'manager',
+    //   initialValue: new arc4.Address(Global.creatorAddress),
+    // })
+    app_global_put
+
+main_after_if_else@2:
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:13
+    // export class Managable extends Contract {
+    txn NumAppArgs
+    bz main_bare_routing@10
+    pushbytess 0x8960168e 0xd48d426c 0x67434031 // method "updateManager(address)void", method "deleteManager()void", method "manager()address"
+    txna ApplicationArgs 0
+    match main_updateManager_route@5 main_deleteManager_route@6 main_manager_route@7
+
+main_after_if_else@14:
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:13
+    // export class Managable extends Contract {
+    intc_1 // 0
+    return
+
+main_manager_route@7:
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:55
+    // @arc4.abimethod({ readonly: true })
+    txn OnCompletion
+    !
+    assert // OnCompletion is not NoOp
+    txn ApplicationID
+    assert // can only call when not creating
+    callsub manager
+    pushbytes 0x151f7c75
+    swap
+    concat
+    log
+    intc_0 // 1
+    return
+
+main_deleteManager_route@6:
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:44
+    // public deleteManager(): void {
+    txn OnCompletion
+    !
+    assert // OnCompletion is not NoOp
+    txn ApplicationID
+    assert // can only call when not creating
+    callsub deleteManager
+    intc_0 // 1
+    return
+
+main_updateManager_route@5:
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:31
+    // public updateManager(newManager: arc4.Address): void {
+    txn OnCompletion
+    !
+    assert // OnCompletion is not NoOp
+    txn ApplicationID
+    assert // can only call when not creating
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:13
+    // export class Managable extends Contract {
+    txna ApplicationArgs 1
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:31
+    // public updateManager(newManager: arc4.Address): void {
+    callsub updateManager
+    intc_0 // 1
+    return
+
+main_bare_routing@10:
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:13
+    // export class Managable extends Contract {
+    txn OnCompletion
+    bnz main_after_if_else@14
+    txn ApplicationID
+    !
+    assert // can only call when creating
+    intc_0 // 1
+    return
+
+
+// smart_contracts/randomness_beacon/contracts/managable.algo.ts::Managable.onlyManager() -> void:
+onlyManager:
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:15
+    // key: 'manager',
+    intc_1 // 0
+    bytec_0 // "manager"
+    app_global_get_ex
+    assert // check GlobalState exists
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:24
+    // assert(this._manager.value.native === Txn.sender, ERR_ONLY_MANAGER)
+    txn Sender
+    ==
+    assert // only manager can perform this action
+    retsub
+
+
+// smart_contracts/randomness_beacon/contracts/managable.algo.ts::Managable.updateManager(newManager: bytes) -> void:
+updateManager:
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:31
+    // public updateManager(newManager: arc4.Address): void {
+    proto 1 0
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:33
+    // this.onlyManager()
+    callsub onlyManager
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:35
+    // assert(newManager.native !== Global.zeroAddress, ERR_ZERO_ADDRESS)
+    frame_dig -1
+    global ZeroAddress
+    !=
+    assert // manager cannot be zero address
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:15
+    // key: 'manager',
+    bytec_0 // "manager"
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:37
+    // this._manager.value = newManager
+    frame_dig -1
+    app_global_put
+    retsub
+
+
+// smart_contracts/randomness_beacon/contracts/managable.algo.ts::Managable.deleteManager() -> void:
+deleteManager:
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:46
+    // this.onlyManager()
+    callsub onlyManager
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:15
+    // key: 'manager',
+    bytec_0 // "manager"
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:48
+    // this._manager.value = new arc4.Address(Global.zeroAddress)
+    global ZeroAddress
+    app_global_put
+    retsub
+
+
+// smart_contracts/randomness_beacon/contracts/managable.algo.ts::Managable.manager() -> bytes:
+manager:
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:15
+    // key: 'manager',
+    intc_1 // 0
+    bytec_0 // "manager"
+    app_global_get_ex
+    assert // check GlobalState exists
+    // smart_contracts/randomness_beacon/contracts/managable.algo.ts:57
+    // return this._manager.value
+    retsub
