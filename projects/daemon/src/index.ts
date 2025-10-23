@@ -16,7 +16,7 @@ function getEnv(name: string) {
   return val
 }
 
-const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS ?? '3000')
+const pollInterval = Number(process.env.POLL_INTERVAL ?? '3000')
 
 const beaconAppId = BigInt(getEnv('BEACON_APP_ID'))
 const managerAccount = mnemonicToSecretKey(getEnv('MANAGER_MNEMONIC'))
@@ -113,7 +113,7 @@ async function main(abortSignal: AbortSignal) {
     makeBasicAccountTransactionSigner(managerAccount),
   )
 
-  console.info(`Service started. Poll interval: ${POLL_INTERVAL_MS}ms`)
+  console.info(`Service started. Poll interval: ${pollInterval}ms`)
 
   // Main loop
   while (!abortSignal.aborted) {
@@ -124,7 +124,7 @@ async function main(abortSignal: AbortSignal) {
     }
 
     try {
-      await delay(POLL_INTERVAL_MS, undefined, { signal: abortSignal })
+      await delay(pollInterval, undefined, { signal: abortSignal })
     } catch (err: any) {
       if (err?.name === 'AbortError') break
       // unexpected timer error; log and continue
