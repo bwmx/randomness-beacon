@@ -16,7 +16,7 @@ function getEnv(name: string) {
   return val
 }
 
-const pollInterval = Number(process.env.POLL_INTERVAL ?? '3000')
+const pollInterval = Number(getEnv('POLL_INTERVAL'))
 
 const beaconAppId = BigInt(getEnv('BEACON_APP_ID'))
 const managerAccount = mnemonicToSecretKey(getEnv('MANAGER_MNEMONIC'))
