@@ -2,22 +2,22 @@ import { Algodv2, makeBasicAccountTransactionSigner, mnemonicToSecretKey, Transa
 import { RandomnessBeaconClient } from './contracts/RandomnessBeaconClient'
 import * as algokit from '@algorandfoundation/algokit-utils'
 
-import libvrf from '../../libvrf'
-
 const algorand = algokit.AlgorandClient.fromEnvironment()
 
 // https://stackoverflow.com/questions/68329418/in-javascript-how-can-i-throw-an-error-if-an-environmental-variable-is-missing
 function getEnv(name: string) {
   const val = process.env[name]
   if (val === undefined) {
-    throw Error('env ${name} is undefined')
+    throw Error(`env ${name} is undefined`)
   }
   return val
 }
 
 const beaconAppId = BigInt(getEnv('BEACON_APP_ID'))
 const managerAccount = mnemonicToSecretKey(getEnv('MANAGER_MNEMONIC'))
-const vrfSecretKey = Buffer.from(getEnv('VRF_KEYPAIR_SECRET_KEY'), 'base64')
+// Lazy-load VRF and secret key only if needed
+let loadedVrfModule: undefined | (typeof import('../../libvrf')['default'])
+let loadedVrfSecretKey: undefined | Uint8Array
 
 const makeRandomnessBeaconClient = (
   appId: bigint,
@@ -34,7 +34,12 @@ const makeRandomnessBeaconClient = (
   return client
 }
 
-const createProofForRound = async (round: bigint, algod: Algodv2): Promise<Uint8Array<ArrayBufferLike>> => {
+const createProofForRound = async (
+  round: bigint,
+  algod: Algodv2,
+  vrfSecretKey: Uint8Array,
+  libvrf: typeof import('../../libvrf').default,
+): Promise<Uint8Array<ArrayBufferLike>> => {
   // get block from node
   const { block } = await algod.block(round).do()
   // get the seed
@@ -50,9 +55,6 @@ const createProofForRound = async (round: bigint, algod: Algodv2): Promise<Uint8
 
 ;(async () => {
   const { algod } = algorand.client
-
-  // init vrf lib
-  await libvrf.init()
 
   const managerClient = makeRandomnessBeaconClient(
     beaconAppId,
@@ -75,8 +77,16 @@ const createProofForRound = async (round: bigint, algod: Algodv2): Promise<Uint8
           console.info(
             `RandomnessRequest ${requestId} is ready to be completed (${lastRound - request.round} after target round)`,
           )
+          // Lazy import and initialize VRF module and secret key on first use
+          if (!loadedVrfModule) {
+            loadedVrfModule = (await import('../../libvrf')).default
+            await loadedVrfModule.init()
+          }
+          if (!loadedVrfSecretKey) {
+            loadedVrfSecretKey = Buffer.from(getEnv('VRF_KEYPAIR_SECRET_KEY'), 'base64')
+          }
           // create the proof
-          const proof = await createProofForRound(request.round, algod)
+          const proof = await createProofForRound(request.round, algod, loadedVrfSecretKey, loadedVrfModule)
           // send complete request
           await managerClient.send.completeRequest({
             args: [requestId, proof],
