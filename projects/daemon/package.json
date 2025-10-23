@@ -4,7 +4,7 @@
   "description": "Daemon",
   "main": "src/index.ts",
   "scripts": {
-    "start": "npx tsc && node --env-file=.env dist/daemon/src/index.js",
+    "start": "node --env-file=.env -r ts-node/register src/index.ts",
     "format": "prettier --write .",
     "build": "npx tsc",
     "test": "echo \"Error: no test specified\" && exit 1",

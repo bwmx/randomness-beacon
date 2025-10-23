@@ -1,3 +1,4 @@
+import { setTimeout as delay } from 'node:timers/promises'
 import { Algodv2, makeBasicAccountTransactionSigner, mnemonicToSecretKey, TransactionSigner } from 'algosdk'
 import { RandomnessBeaconClient } from './contracts/RandomnessBeaconClient'
 import * as algokit from '@algorandfoundation/algokit-utils'
@@ -10,10 +11,12 @@ const algorand = algokit.AlgorandClient.fromEnvironment()
 function getEnv(name: string) {
   const val = process.env[name]
   if (val === undefined) {
-    throw Error('env ${name} is undefined')
+    throw Error(`env ${name} is undefined`)
   }
   return val
 }
+
+const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS ?? '3000')
 
 const beaconAppId = BigInt(getEnv('BEACON_APP_ID'))
 const managerAccount = mnemonicToSecretKey(getEnv('MANAGER_MNEMONIC'))
@@ -48,10 +51,60 @@ const createProofForRound = async (round: bigint, algod: Algodv2): Promise<Uint8
   return proof
 }
 
-;(async () => {
+async function processPendingRequests(managerClient: RandomnessBeaconClient, algod: Algodv2) {
+  const totalPendingRequests = await managerClient.state.global.totalPendingRequests()
+  if (totalPendingRequests === undefined) {
+    console.warn("totalPendingRequests does not exist in the beacon global state. this shouldn't be possible!")
+    return
+  }
+
+  if (totalPendingRequests === 0n) {
+    console.info('there are no pending requests')
+    return
+  }
+
+  console.info(`${totalPendingRequests} pending requests`)
+
+  // get lastRound from chain to get a reference point in time
+  const { lastRound } = await algod.status().do()
+
+  // read the boxes to get pending requests
+  const boxMap = await managerClient.state.box.requests.getMap()
+  for (const [requestId, request] of boxMap) {
+    if (request.round <= lastRound) {
+      console.info(
+        `RandomnessRequest ${requestId} is ready to be completed (${lastRound - request.round} after target round)`,
+      )
+      const proof = await createProofForRound(request.round, algod)
+      await managerClient.send.completeRequest({
+        args: [requestId, proof],
+        populateAppCallResources: true,
+        coverAppCallInnerTransactionFees: true,
+        // TODO: consider doing this dynamically, allow users to cover additional fee costs by overpaying to the beacon
+        maxFee: algokit.algos(0.012),
+      })
+    } else if (request.round + 1000n >= lastRound) {
+      console.info(
+        `RandomnessRequest ${requestId} has timed out (${lastRound - request.round} rounds past accessable round range)`,
+      )
+      await managerClient.send.cancelRequest({
+        args: [requestId],
+        populateAppCallResources: true,
+        coverAppCallInnerTransactionFees: true,
+        maxFee: algokit.algos(0.003), // TODO: consider max fee changing
+      })
+    } else {
+      console.info(
+        `RandomnessRequest ${requestId} can be completed at round ${request.round} (in ${request.round - lastRound} rounds)`,
+      )
+    }
+  }
+}
+
+async function main(abortSignal: AbortSignal) {
   const { algod } = algorand.client
 
-  // init vrf lib
+  // init vrf lib once
   await libvrf.init()
 
   const managerClient = makeRandomnessBeaconClient(
@@ -60,56 +113,41 @@ const createProofForRound = async (round: bigint, algod: Algodv2): Promise<Uint8
     makeBasicAccountTransactionSigner(managerAccount),
   )
 
-  const totalPendingRequests = await managerClient.state.global.totalPendingRequests()
-  if (totalPendingRequests !== undefined) {
-    if (totalPendingRequests > 0) {
-      console.info(`${totalPendingRequests} pending requests`)
-      // get lastRound from chain to get a reference point in time
-      const { lastRound } = await algod.status().do()
-      // read the boxes to get pending requests
-      const boxMap = await managerClient.state.box.requests.getMap()
-      for (const [requestId, request] of boxMap) {
-        // iterate all and check if can be completed, cancelled or no action
-        if (request.round <= lastRound) {
-          // request round is available, we should call completeRequest with the vrf proof output
-          console.info(
-            `RandomnessRequest ${requestId} is ready to be completed (${lastRound - request.round} after target round)`,
-          )
-          // create the proof
-          const proof = await createProofForRound(request.round, algod)
-          // send complete request
-          await managerClient.send.completeRequest({
-            args: [requestId, proof],
-            populateAppCallResources: true,
-            coverAppCallInnerTransactionFees: true,
-            // TODO: consider doing this dynamically, allow users to cover additional fee costs by overpaying to the beacon
-            maxFee: algokit.algos(0.012),
-          })
-        } else if (request.round + 1000n >= lastRound) {
-          // we have reached the max amount of time elapsed to complete a request, this round can no longer be accessed
-          console.info(
-            `RandomnessRequest ${requestId} has timed out (${lastRound - request.round} rounds past accessable round range)`,
-          )
-          // attempt to cancel the request
-          await managerClient.send.cancelRequest({
-            args: [requestId],
-            populateAppCallResources: true,
-            coverAppCallInnerTransactionFees: true,
-            maxFee: algokit.algos(0.003), // TODO: consider max fee changing
-          })
-        } else {
-          console.info(
-            `RandomnessRequest ${requestId} can be completed at round ${request.round} (in ${request.round - lastRound} rounds)`,
-          )
-        }
-      }
-    } else {
-      console.info('there are no pending requests')
+  console.info(`Service started. Poll interval: ${POLL_INTERVAL_MS}ms`)
+
+  // Main loop
+  while (!abortSignal.aborted) {
+    try {
+      await processPendingRequests(managerClient, algod)
+    } catch (err) {
+      console.error('Error during processing cycle:', err)
     }
-  } else {
-    // does not exist in state, should be impossible as exists and is initialised at creation
-    console.warn("totalPendingRequests does not exist in the beacon global state. this shouldn't be possible!")
+
+    try {
+      await delay(POLL_INTERVAL_MS, undefined, { signal: abortSignal })
+    } catch (err: any) {
+      if (err?.name === 'AbortError') break
+      // unexpected timer error; log and continue
+      console.error('Timer error:', err)
+    }
   }
-})().catch((reason) => {
-  console.error(reason)
+}
+
+const abortController = new AbortController()
+
+process.on('SIGINT', () => {
+  console.info('SIGINT received, shutting down...')
+  abortController.abort()
 })
+
+process.on('SIGTERM', () => {
+  console.info('SIGTERM received, shutting down...')
+  abortController.abort()
+})
+
+main(abortController.signal)
+  .then(() => console.info('Service stopped.'))
+  .catch((reason) => {
+    console.error('Fatal error:', reason)
+    process.exitCode = 1
+  })
