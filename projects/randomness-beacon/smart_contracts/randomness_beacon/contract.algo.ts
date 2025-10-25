@@ -25,13 +25,15 @@ import {
   BOX_BYTE_COST,
   BOX_CREATE_COST,
   ERR_COSTS_PAYMENT_MUST_BE_VALID,
+  ERR_MAX_FUTURE_ROUNDS_CANNOT_BE_ZERO,
   ERR_MAX_PENDING_REQUESTS,
+  ERR_MAX_PENDING_REQUESTS_CANNOT_BE_ZERO,
   ERR_MUST_BE_CALLED_FROM_APP,
   ERR_MUST_BE_FUTURE_ROUND,
   ERR_NO_PENDING_REQUESTS,
   ERR_PROOF_MUST_BE_VALID,
-  MAX_PENDING_REQUESTS,
-  MAX_PENDING_TIME,
+  ERR_REQUEST_MUST_BE_STALE,
+  ERR_TIMEOUT_CANNOT_BE_ZERO,
   NOTE_BOX_MBR_REFUND,
   NOTE_CANCEL_PAYMENT,
   NOTE_CLOSE_OUT_REMAINDER,
@@ -48,11 +50,32 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
   /* the public key used to verify VRF proofs */
   publicKey = GlobalState<arc4.StaticBytes<32>>({ key: 'publicKey' })
 
-  /* the current request ID index, useful for tracking. set to 1 initially */
-  currentRequestId = GlobalState<arc4.UintN64>({ key: 'currentRequestId', initialValue: new arc4.UintN64(1) })
+  /* the next requestId index, useful for tracking. set to 1 initially */
+  nextRequestId = GlobalState<arc4.UintN64>({ key: 'nextRequestId', initialValue: new arc4.UintN64(1) })
 
   /* box map of randomness requests */
   requests = BoxMap<arc4.UintN64, RandomnessRequest>({ keyPrefix: 'requests' })
+
+  /**
+   * Max rounds in the future ([current round] + maxFutureRounds) allowed for requests
+   */
+  maxFutureRounds = GlobalState<arc4.UintN64>({
+    key: 'maxFutureRounds',
+  })
+
+  /**
+   * Max number of pending requests allowed
+   */
+  maxPendingRequests = GlobalState<arc4.UintN64>({
+    key: 'maxPendingRequests',
+  })
+
+  /**
+   * Stale request timeout in rounds (after which a request can be cancelled after RandomnessRequest.round)
+   */
+  staleRequestTimeout = GlobalState<arc4.UintN64>({
+    key: 'staleRequestTimeout',
+  })
 
   /* total number of pending requests, useful for limiting load on the contract */
   totalPendingRequests = GlobalState<arc4.UintN64>({ key: 'totalPendingRequests', initialValue: new arc4.UintN64(0) })
@@ -70,12 +93,44 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
   }
 
   /**
-   *
-   * @param publicKey the public key used to verify VRF proofs we will accept
+   * Gets and increments the next request ID
+   * @returns the next available request ID
+   * @description increments the nextRequestId global state + 1
    */
-  createApplication(publicKey: arc4.StaticBytes<32>): void {
+  private getNextRequestId(): arc4.UintN64 {
+    // get the current value
+    const requestId = this.nextRequestId.value
+    // increment on global state
+    this.nextRequestId.value = new arc4.UintN64(requestId.native + 1)
+
+    return requestId
+  }
+
+  /**
+   * Called upon application creation
+   * @param publicKey the public key used to verify VRF proofs we will accept
+   * @param maxPendingRequests the maximum number of pending requests allowed at any time
+   * @param maxFutureRounds the maximum round in the future a request can be targeted
+   * @param staleRequestTimeout the number of rounds after the target round a request can be cancelled
+   */
+  createApplication(
+    publicKey: arc4.StaticBytes<32>,
+    maxPendingRequests: arc4.UintN64,
+    maxFutureRounds: arc4.UintN64,
+    staleRequestTimeout: arc4.UintN64,
+  ): void {
+    // validate config params, publicKey is assumed to be valid
+    assert(maxPendingRequests.native > 0, ERR_MAX_PENDING_REQUESTS_CANNOT_BE_ZERO)
+    assert(maxFutureRounds.native > 0, ERR_MAX_FUTURE_ROUNDS_CANNOT_BE_ZERO)
+    assert(staleRequestTimeout.native > 0, ERR_TIMEOUT_CANNOT_BE_ZERO)
     // store the public key we will accept verified proofs from
     this.publicKey.value = publicKey
+    // store the max pending requests
+    this.maxPendingRequests.value = maxPendingRequests
+    // store the max future round
+    this.maxFutureRounds.value = maxFutureRounds
+    // store the stale request timeout
+    this.staleRequestTimeout.value = staleRequestTimeout
   }
 
   // should not be enabled in production
@@ -112,9 +167,11 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
     // when not paused, users can create new requests
     this.whenNotPaused()
     // ensure there is capacity for more pending requests
-    assert(this.totalPendingRequests.value.native < MAX_PENDING_REQUESTS, ERR_MAX_PENDING_REQUESTS)
+    assert(this.totalPendingRequests.value.native < this.maxPendingRequests.value.native, ERR_MAX_PENDING_REQUESTS)
     // ensure the requested round is in the future
     assert(round.native > Global.round, ERR_MUST_BE_FUTURE_ROUND)
+    // ensure the requested round is within the allowed future round limit
+    assert(round.native <= Global.round + this.maxFutureRounds.value.native, 'error: round exceeds max future round')
     // get caller app id
     const callerAppId = Global.callerApplicationId
     // this method should only be callable by app inner txns
@@ -147,12 +204,10 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
       boxCost: boxCost,
     })
 
-    // get current request id
-    const requestId = this.currentRequestId.value
+    // get next available requestId
+    const requestId = this.getNextRequestId()
     // store request in box
     this.requests(requestId).value = request.copy()
-    // increment the global state ready for the next request
-    this.currentRequestId.value = new arc4.UintN64(requestId.native + 1)
     // increment the total pending requests
     this.totalPendingRequests.value = new arc4.UintN64(this.totalPendingRequests.value.native + 1)
 
@@ -172,8 +227,8 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
   public cancelRequest(requestId: arc4.UintN64): void {
     // get value from the box
     const request: RandomnessRequest = this.requests(requestId).value.copy()
-    // cannot cancel until X rounds have elapsed
-    assert(Global.round >= request.round.native + MAX_PENDING_TIME, 'must be after the max pending time')
+    // cannot cancel until >= (request.round + staleRequestTimeout)
+    assert(Global.round >= request.round.native + this.staleRequestTimeout.value.native, ERR_REQUEST_MUST_BE_STALE)
 
     let amountToRefund: uint64 = request.boxCost.native + request.feePaid.native
 

@@ -6,11 +6,7 @@
  */
 import { type AlgorandClient } from '@algorandfoundation/algokit-utils/types/algorand-client'
 import { ABIReturn, AppReturn, SendAppTransactionResult } from '@algorandfoundation/algokit-utils/types/app'
-import {
-  Arc56Contract,
-  getArc56ReturnValue,
-  getABIStructFromABITuple,
-} from '@algorandfoundation/algokit-utils/types/app-arc56'
+import { Arc56Contract, getArc56ReturnValue, getABIStructFromABITuple } from '@algorandfoundation/algokit-utils/types/app-arc56'
 import {
   AppClient as _AppClient,
   AppClientMethodCallParams,
@@ -22,311 +18,12 @@ import {
   ResolveAppClientByNetwork,
   CloneAppClientParams,
 } from '@algorandfoundation/algokit-utils/types/app-client'
-import {
-  AppFactory as _AppFactory,
-  AppFactoryAppClientParams,
-  AppFactoryResolveAppClientByCreatorAndNameParams,
-  AppFactoryDeployParams,
-  AppFactoryParams,
-  CreateSchema,
-} from '@algorandfoundation/algokit-utils/types/app-factory'
-import {
-  TransactionComposer,
-  AppCallMethodCall,
-  AppMethodCallTransactionArgument,
-  SimulateOptions,
-  RawSimulateOptions,
-  SkipSignaturesSimulateOptions,
-} from '@algorandfoundation/algokit-utils/types/composer'
-import {
-  SendParams,
-  SendSingleTransactionResult,
-  SendAtomicTransactionComposerResults,
-} from '@algorandfoundation/algokit-utils/types/transaction'
+import { AppFactory as _AppFactory, AppFactoryAppClientParams, AppFactoryResolveAppClientByCreatorAndNameParams, AppFactoryDeployParams, AppFactoryParams, CreateSchema } from '@algorandfoundation/algokit-utils/types/app-factory'
+import { TransactionComposer, AppCallMethodCall, AppMethodCallTransactionArgument, SimulateOptions, RawSimulateOptions, SkipSignaturesSimulateOptions } from '@algorandfoundation/algokit-utils/types/composer'
+import { SendParams, SendSingleTransactionResult, SendAtomicTransactionComposerResults } from '@algorandfoundation/algokit-utils/types/transaction'
 import { Address, encodeAddress, modelsv2, OnApplicationComplete, Transaction, TransactionSigner } from 'algosdk'
 
-export const APP_SPEC: Arc56Contract = {
-  name: 'RandomnessBeacon',
-  structs: {
-    RandomnessRequest: [
-      { name: 'createdAt', type: 'uint64' },
-      { name: 'requesterAppId', type: 'uint64' },
-      { name: 'requesterAddress', type: 'address' },
-      { name: 'round', type: 'uint64' },
-      { name: 'feePaid', type: 'uint64' },
-      { name: 'boxCost', type: 'uint64' },
-    ],
-  },
-  methods: [
-    {
-      name: 'createApplication',
-      args: [{ type: 'byte[32]', name: 'publicKey', desc: 'the public key used to verify VRF proofs we will accept' }],
-      returns: { type: 'void' },
-      actions: { create: ['NoOp'], call: [] },
-      readonly: false,
-      events: [],
-      recommendations: {},
-    },
-    {
-      name: 'updateApplication',
-      args: [],
-      returns: { type: 'void' },
-      actions: { create: [], call: ['UpdateApplication'] },
-      readonly: false,
-      events: [],
-      recommendations: {},
-    },
-    {
-      name: 'deleteApplication',
-      args: [],
-      returns: { type: 'void' },
-      actions: { create: [], call: ['DeleteApplication'] },
-      readonly: false,
-      events: [],
-      recommendations: {},
-    },
-    {
-      name: 'createRequest',
-      args: [
-        { type: 'address', name: 'requesterAddress', desc: 'who the request is on behalf of?' },
-        { type: 'uint64', name: 'round', desc: 'the round to request the randomness for' },
-        { type: 'pay', name: 'costsPayment', desc: 'payment covering txnFees + boxCost' },
-      ],
-      returns: { type: 'uint64', desc: 'a unique request ID to be used to identify the request' },
-      actions: { create: [], call: ['NoOp'] },
-      readonly: false,
-      events: [
-        {
-          name: 'RequestCreated',
-          args: [
-            { type: 'uint64', name: 'requestId' },
-            { type: 'uint64', name: 'requesterAppId' },
-            { type: 'address', name: 'requesterAddress' },
-            { type: 'uint64', name: 'round' },
-          ],
-        },
-      ],
-      recommendations: {},
-    },
-    {
-      name: 'cancelRequest',
-      args: [{ type: 'uint64', name: 'requestId' }],
-      returns: { type: 'void' },
-      actions: { create: [], call: ['NoOp'] },
-      readonly: false,
-      events: [
-        {
-          name: 'RequestCancelled',
-          args: [
-            { type: 'uint64', name: 'requestId' },
-            { type: 'uint64', name: 'requesterAppId' },
-            { type: 'address', name: 'requesterAddress' },
-          ],
-        },
-      ],
-      recommendations: {},
-    },
-    {
-      name: 'completeRequest',
-      args: [
-        { type: 'uint64', name: 'requestId', desc: 'the ID of the VRF request' },
-        {
-          type: 'byte[80]',
-          name: 'proof',
-          desc: 'the VRF proof output using the `targetRound` block seed of the targeted RandomnessBeaconRequest',
-        },
-      ],
-      returns: { type: 'void' },
-      actions: { create: [], call: ['NoOp'] },
-      readonly: false,
-      events: [
-        {
-          name: 'RequestFulfilled',
-          args: [
-            { type: 'uint64', name: 'requestId' },
-            { type: 'uint64', name: 'requesterAppId' },
-            { type: 'address', name: 'requesterAddress' },
-          ],
-        },
-      ],
-      recommendations: {},
-    },
-    {
-      name: 'getCosts',
-      args: [],
-      returns: {
-        type: '(uint64,uint64)',
-        desc: 'arc4.Tuple<[txnFees, boxCost] - tuple of the required txn fees and box cost (that will be refunded)',
-      },
-      actions: { create: [], call: ['NoOp'] },
-      readonly: true,
-      desc: '\nConvenience function to get associated costs with using the beacon service',
-      events: [],
-      recommendations: {},
-    },
-    {
-      name: 'updateManager',
-      args: [{ type: 'address', name: 'newManager' }],
-      returns: { type: 'void' },
-      actions: { create: [], call: ['NoOp'] },
-      readonly: false,
-      desc: 'Update the manager of this contract',
-      events: [],
-      recommendations: {},
-    },
-    {
-      name: 'deleteManager',
-      args: [],
-      returns: { type: 'void' },
-      actions: { create: [], call: ['NoOp'] },
-      readonly: false,
-      desc: 'Delete the manager of this contract',
-      events: [],
-      recommendations: {},
-    },
-    {
-      name: 'manager',
-      args: [],
-      returns: { type: 'address', desc: 'The current manager of this contract' },
-      actions: { create: [], call: ['NoOp'] },
-      readonly: true,
-      desc: 'Convenience function to get the current manager of this contract',
-      events: [],
-      recommendations: {},
-    },
-    {
-      name: 'pause',
-      args: [],
-      returns: { type: 'void' },
-      actions: { create: [], call: ['NoOp'] },
-      readonly: false,
-      events: [],
-      recommendations: {},
-    },
-    {
-      name: 'unpause',
-      args: [],
-      returns: { type: 'void' },
-      actions: { create: [], call: ['NoOp'] },
-      readonly: false,
-      events: [],
-      recommendations: {},
-    },
-    {
-      name: 'updatePauser',
-      args: [{ type: 'address', name: '_newPauser' }],
-      returns: { type: 'void' },
-      actions: { create: [], call: ['NoOp'] },
-      readonly: false,
-      events: [],
-      recommendations: {},
-    },
-    {
-      name: 'pauser',
-      args: [],
-      returns: { type: 'address', desc: 'The current pauser' },
-      actions: { create: [], call: ['NoOp'] },
-      readonly: true,
-      desc: 'Convenience function to get the pauser',
-      events: [],
-      recommendations: {},
-    },
-  ],
-  arcs: [22, 28],
-  networks: {},
-  state: {
-    schema: { global: { ints: 0, bytes: 6 }, local: { ints: 0, bytes: 0 } },
-    keys: {
-      global: {
-        publicKey: { keyType: 'AVMString', valueType: 'byte[32]', key: 'cHVibGljS2V5' },
-        currentRequestId: { keyType: 'AVMString', valueType: 'uint64', key: 'Y3VycmVudFJlcXVlc3RJZA==' },
-        totalPendingRequests: { keyType: 'AVMString', valueType: 'uint64', key: 'dG90YWxQZW5kaW5nUmVxdWVzdHM=' },
-        _manager: { keyType: 'AVMString', valueType: 'address', key: 'bWFuYWdlcg==' },
-        _pauser: { keyType: 'AVMString', valueType: 'address', key: 'cGF1c2Vy' },
-        paused: { keyType: 'AVMString', valueType: 'bool', key: 'cGF1c2Vk' },
-      },
-      local: {},
-      box: {},
-    },
-    maps: {
-      global: {},
-      local: {},
-      box: { requests: { keyType: 'uint64', valueType: 'RandomnessRequest', prefix: 'cmVxdWVzdHM=' } },
-    },
-  },
-  bareActions: { create: [], call: [] },
-  sourceInfo: {
-    approval: {
-      sourceInfo: [
-        { pc: [758, 919], errorMessage: 'Box must have value' },
-        { pc: [620, 784, 879, 975, 984], errorMessage: 'Index access is out of bounds' },
-        { pc: [454], errorMessage: 'OnCompletion is not DeleteApplication' },
-        { pc: [270, 287, 302, 314, 326, 343, 355, 370, 387, 405, 420, 480], errorMessage: 'OnCompletion is not NoOp' },
-        { pc: [468], errorMessage: 'OnCompletion is not UpdateApplication' },
-        { pc: [484], errorMessage: 'can only call when creating' },
-        {
-          pc: [273, 290, 305, 317, 329, 346, 358, 373, 390, 408, 423, 457, 471],
-          errorMessage: 'can only call when not creating',
-        },
-        { pc: [604], errorMessage: 'cannot exceed max pending requests' },
-        { pc: [499, 534, 592, 600, 690, 711, 961, 1130, 1164, 1169, 1213], errorMessage: 'check GlobalState exists' },
-        { pc: [651], errorMessage: 'costs payment must be valid' },
-        { pc: [993], errorMessage: 'invalid size' },
-        { pc: [1147], errorMessage: 'manager cannot be zero address' },
-        { pc: [611], errorMessage: 'must be a future round' },
-        { pc: [770], errorMessage: 'must be after the max pending time' },
-        { pc: [615], errorMessage: 'must be called by an application' },
-        { pc: [537], errorMessage: 'no pending requests' },
-        { pc: [1134], errorMessage: 'only manager can perform this action' },
-        { pc: [1173], errorMessage: 'only pauser can call this method' },
-        { pc: [1204], errorMessage: 'pauser cannot be zero address' },
-        { pc: [970], errorMessage: 'proof must be valid' },
-        { pc: [439], errorMessage: 'transaction type is pay' },
-      ],
-      pcOffsetMethod: 'none',
-    },
-    clear: { sourceInfo: [], pcOffsetMethod: 'none' },
-  },
-  source: {
-    approval:
-      'I3ByYWdtYSB2ZXJzaW9uIDExCiNwcmFnbWEgdHlwZXRyYWNrIGZhbHNlCgovLyBAYWxnb3JhbmRmb3VuZGF0aW9uL2FsZ29yYW5kLXR5cGVzY3JpcHQvYXJjNC9pbmRleC5kLnRzOjpDb250cmFjdC5hcHByb3ZhbFByb2dyYW0oKSAtPiB1aW50NjQ6Cm1haW46CiAgICBpbnRjYmxvY2sgMSAwIDUgOAogICAgYnl0ZWNibG9jayAidG90YWxQZW5kaW5nUmVxdWVzdHMiICJtYW5hZ2VyIiAicGF1c2VyIiAicGF1c2VkIiAweDE1MWY3Yzc1ICJyZXF1ZXN0cyIgImN1cnJlbnRSZXF1ZXN0SWQiICJwdWJsaWNLZXkiICJib3ggbWJyIHJlZnVuZCIgMHgwNjgxMDEKICAgIHR4biBBcHBsaWNhdGlvbklECiAgICBibnogbWFpbl9hZnRlcl9pZl9lbHNlQDIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6MTUKICAgIC8vIGtleTogJ21hbmFnZXInLAogICAgYnl0ZWNfMSAvLyAibWFuYWdlciIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6MTYKICAgIC8vIGluaXRpYWxWYWx1ZTogbmV3IGFyYzQuQWRkcmVzcyhHbG9iYWwuY3JlYXRvckFkZHJlc3MpLAogICAgZ2xvYmFsIENyZWF0b3JBZGRyZXNzCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL21hbmFnYWJsZS5hbGdvLnRzOjE0LTE3CiAgICAvLyBwcml2YXRlIF9tYW5hZ2VyID0gR2xvYmFsU3RhdGU8YXJjNC5BZGRyZXNzPih7CiAgICAvLyAgIGtleTogJ21hbmFnZXInLAogICAgLy8gICBpbml0aWFsVmFsdWU6IG5ldyBhcmM0LkFkZHJlc3MoR2xvYmFsLmNyZWF0b3JBZGRyZXNzKSwKICAgIC8vIH0pCiAgICBhcHBfZ2xvYmFsX3B1dAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjgKICAgIC8vIGtleTogJ3BhdXNlcicsCiAgICBieXRlY18yIC8vICJwYXVzZXIiCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6OQogICAgLy8gaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5BZGRyZXNzKEdsb2JhbC5jcmVhdG9yQWRkcmVzcyksCiAgICBnbG9iYWwgQ3JlYXRvckFkZHJlc3MKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czo3LTEwCiAgICAvLyBwcml2YXRlIF9wYXVzZXIgPSBHbG9iYWxTdGF0ZTxhcmM0LkFkZHJlc3M+KHsKICAgIC8vICAga2V5OiAncGF1c2VyJywKICAgIC8vICAgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5BZGRyZXNzKEdsb2JhbC5jcmVhdG9yQWRkcmVzcyksCiAgICAvLyB9KQogICAgYXBwX2dsb2JhbF9wdXQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czoxMwogICAgLy8gcGF1c2VkID0gR2xvYmFsU3RhdGU8YXJjNC5Cb29sPih7IGtleTogJ3BhdXNlZCcsIGluaXRpYWxWYWx1ZTogbmV3IGFyYzQuQm9vbChmYWxzZSkgfSkKICAgIGJ5dGVjXzMgLy8gInBhdXNlZCIKICAgIHB1c2hieXRlcyAweDAwCiAgICBhcHBfZ2xvYmFsX3B1dAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NTIKICAgIC8vIGN1cnJlbnRSZXF1ZXN0SWQgPSBHbG9iYWxTdGF0ZTxhcmM0LlVpbnRONjQ+KHsga2V5OiAnY3VycmVudFJlcXVlc3RJZCcsIGluaXRpYWxWYWx1ZTogbmV3IGFyYzQuVWludE42NCgxKSB9KQogICAgYnl0ZWMgNiAvLyAiY3VycmVudFJlcXVlc3RJZCIKICAgIHB1c2hieXRlcyAweDAwMDAwMDAwMDAwMDAwMDEKICAgIGFwcF9nbG9iYWxfcHV0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo1OAogICAgLy8gdG90YWxQZW5kaW5nUmVxdWVzdHMgPSBHbG9iYWxTdGF0ZTxhcmM0LlVpbnRONjQ+KHsga2V5OiAndG90YWxQZW5kaW5nUmVxdWVzdHMnLCBpbml0aWFsVmFsdWU6IG5ldyBhcmM0LlVpbnRONjQoMCkgfSkKICAgIGJ5dGVjXzAgLy8gInRvdGFsUGVuZGluZ1JlcXVlc3RzIgogICAgcHVzaGJ5dGVzIDB4MDAwMDAwMDAwMDAwMDAwMAogICAgYXBwX2dsb2JhbF9wdXQKCm1haW5fYWZ0ZXJfaWZfZWxzZUAyOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NDYtNDcKICAgIC8vIEBjb250cmFjdCh7IG5hbWU6ICdSYW5kb21uZXNzQmVhY29uJywgYXZtVmVyc2lvbjogMTEgfSkKICAgIC8vIGV4cG9ydCBjbGFzcyBSYW5kb21uZXNzQmVhY29uIGV4dGVuZHMgY2xhc3NlcyhNYW5hZ2FibGUsIFBhdXNhYmxlLCBDb250cmFjdCkgaW1wbGVtZW50cyBhcmM0LkNvbnZlbnRpb25hbFJvdXRpbmcgewogICAgdHhuIE51bUFwcEFyZ3MKICAgIGJ6IG1haW5fYWZ0ZXJfaWZfZWxzZUAyMgogICAgcHVzaGJ5dGVzcyAweGVmY2JkM2NiIDB4NDZmNzY1MzMgMHgyNDg3YzMyYyAweGQ4OThlZWI3IDB4ZjEyYzYyOWUgMHgyMWI2OWM1OSAweDZjMTk2MTVhIDB4ODk2MDE2OGUgMHhkNDhkNDI2YyAweDY3NDM0MDMxIDB4MDE3OGY5NGIgMHgxYjUyOWRlOCAweDBjYWRkMTYzIDB4YjBkOTUzYjMgLy8gbWV0aG9kICJjcmVhdGVBcHBsaWNhdGlvbihieXRlWzMyXSl2b2lkIiwgbWV0aG9kICJ1cGRhdGVBcHBsaWNhdGlvbigpdm9pZCIsIG1ldGhvZCAiZGVsZXRlQXBwbGljYXRpb24oKXZvaWQiLCBtZXRob2QgImNyZWF0ZVJlcXVlc3QoYWRkcmVzcyx1aW50NjQscGF5KXVpbnQ2NCIsIG1ldGhvZCAiY2FuY2VsUmVxdWVzdCh1aW50NjQpdm9pZCIsIG1ldGhvZCAiY29tcGxldGVSZXF1ZXN0KHVpbnQ2NCxieXRlWzgwXSl2b2lkIiwgbWV0aG9kICJnZXRDb3N0cygpKHVpbnQ2NCx1aW50NjQpIiwgbWV0aG9kICJ1cGRhdGVNYW5hZ2VyKGFkZHJlc3Mpdm9pZCIsIG1ldGhvZCAiZGVsZXRlTWFuYWdlcigpdm9pZCIsIG1ldGhvZCAibWFuYWdlcigpYWRkcmVzcyIsIG1ldGhvZCAicGF1c2UoKXZvaWQiLCBtZXRob2QgInVucGF1c2UoKXZvaWQiLCBtZXRob2QgInVwZGF0ZVBhdXNlcihhZGRyZXNzKXZvaWQiLCBtZXRob2QgInBhdXNlcigpYWRkcmVzcyIKICAgIHR4bmEgQXBwbGljYXRpb25BcmdzIDAKICAgIG1hdGNoIG1haW5fY3JlYXRlQXBwbGljYXRpb25fcm91dGVANSBtYWluX3VwZGF0ZUFwcGxpY2F0aW9uX3JvdXRlQDYgbWFpbl9kZWxldGVBcHBsaWNhdGlvbl9yb3V0ZUA3IG1haW5fY3JlYXRlUmVxdWVzdF9yb3V0ZUA4IG1haW5fY2FuY2VsUmVxdWVzdF9yb3V0ZUA5IG1haW5fY29tcGxldGVSZXF1ZXN0X3JvdXRlQDEwIG1haW5fZ2V0Q29zdHNfcm91dGVAMTEgbWFpbl91cGRhdGVNYW5hZ2VyX3JvdXRlQDEyIG1haW5fZGVsZXRlTWFuYWdlcl9yb3V0ZUAxMyBtYWluX21hbmFnZXJfcm91dGVAMTQgbWFpbl9wYXVzZV9yb3V0ZUAxNSBtYWluX3VucGF1c2Vfcm91dGVAMTYgbWFpbl91cGRhdGVQYXVzZXJfcm91dGVAMTcgbWFpbl9wYXVzZXJfcm91dGVAMTgKCm1haW5fYWZ0ZXJfaWZfZWxzZUAyMjoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjQ2LTQ3CiAgICAvLyBAY29udHJhY3QoeyBuYW1lOiAnUmFuZG9tbmVzc0JlYWNvbicsIGF2bVZlcnNpb246IDExIH0pCiAgICAvLyBleHBvcnQgY2xhc3MgUmFuZG9tbmVzc0JlYWNvbiBleHRlbmRzIGNsYXNzZXMoTWFuYWdhYmxlLCBQYXVzYWJsZSwgQ29udHJhY3QpIGltcGxlbWVudHMgYXJjNC5Db252ZW50aW9uYWxSb3V0aW5nIHsKICAgIGludGNfMSAvLyAwCiAgICByZXR1cm4KCm1haW5fcGF1c2VyX3JvdXRlQDE4OgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjUwCiAgICAvLyBAYXJjNC5hYmltZXRob2QoeyByZWFkb25seTogdHJ1ZSB9KQogICAgdHhuIE9uQ29tcGxldGlvbgogICAgIQogICAgYXNzZXJ0IC8vIE9uQ29tcGxldGlvbiBpcyBub3QgTm9PcAogICAgdHhuIEFwcGxpY2F0aW9uSUQKICAgIGFzc2VydCAvLyBjYW4gb25seSBjYWxsIHdoZW4gbm90IGNyZWF0aW5nCiAgICBjYWxsc3ViIHBhdXNlcgogICAgYnl0ZWMgNCAvLyAweDE1MWY3Yzc1CiAgICBzd2FwCiAgICBjb25jYXQKICAgIGxvZwogICAgaW50Y18wIC8vIDEKICAgIHJldHVybgoKbWFpbl91cGRhdGVQYXVzZXJfcm91dGVAMTc6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6MzcKICAgIC8vIHVwZGF0ZVBhdXNlcihfbmV3UGF1c2VyOiBhcmM0LkFkZHJlc3MpOiB2b2lkIHsKICAgIHR4biBPbkNvbXBsZXRpb24KICAgICEKICAgIGFzc2VydCAvLyBPbkNvbXBsZXRpb24gaXMgbm90IE5vT3AKICAgIHR4biBBcHBsaWNhdGlvbklECiAgICBhc3NlcnQgLy8gY2FuIG9ubHkgY2FsbCB3aGVuIG5vdCBjcmVhdGluZwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NDYtNDcKICAgIC8vIEBjb250cmFjdCh7IG5hbWU6ICdSYW5kb21uZXNzQmVhY29uJywgYXZtVmVyc2lvbjogMTEgfSkKICAgIC8vIGV4cG9ydCBjbGFzcyBSYW5kb21uZXNzQmVhY29uIGV4dGVuZHMgY2xhc3NlcyhNYW5hZ2FibGUsIFBhdXNhYmxlLCBDb250cmFjdCkgaW1wbGVtZW50cyBhcmM0LkNvbnZlbnRpb25hbFJvdXRpbmcgewogICAgdHhuYSBBcHBsaWNhdGlvbkFyZ3MgMQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjM3CiAgICAvLyB1cGRhdGVQYXVzZXIoX25ld1BhdXNlcjogYXJjNC5BZGRyZXNzKTogdm9pZCB7CiAgICBjYWxsc3ViIHVwZGF0ZVBhdXNlcgogICAgaW50Y18wIC8vIDEKICAgIHJldHVybgoKbWFpbl91bnBhdXNlX3JvdXRlQDE2OgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjMxCiAgICAvLyB1bnBhdXNlKCk6IHZvaWQgewogICAgdHhuIE9uQ29tcGxldGlvbgogICAgIQogICAgYXNzZXJ0IC8vIE9uQ29tcGxldGlvbiBpcyBub3QgTm9PcAogICAgdHhuIEFwcGxpY2F0aW9uSUQKICAgIGFzc2VydCAvLyBjYW4gb25seSBjYWxsIHdoZW4gbm90IGNyZWF0aW5nCiAgICBjYWxsc3ViIHVucGF1c2UKICAgIGludGNfMCAvLyAxCiAgICByZXR1cm4KCm1haW5fcGF1c2Vfcm91dGVAMTU6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6MjMKICAgIC8vIHBhdXNlKCk6IHZvaWQgewogICAgdHhuIE9uQ29tcGxldGlvbgogICAgIQogICAgYXNzZXJ0IC8vIE9uQ29tcGxldGlvbiBpcyBub3QgTm9PcAogICAgdHhuIEFwcGxpY2F0aW9uSUQKICAgIGFzc2VydCAvLyBjYW4gb25seSBjYWxsIHdoZW4gbm90IGNyZWF0aW5nCiAgICBjYWxsc3ViIHBhdXNlCiAgICBpbnRjXzAgLy8gMQogICAgcmV0dXJuCgptYWluX21hbmFnZXJfcm91dGVAMTQ6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL21hbmFnYWJsZS5hbGdvLnRzOjU1CiAgICAvLyBAYXJjNC5hYmltZXRob2QoeyByZWFkb25seTogdHJ1ZSB9KQogICAgdHhuIE9uQ29tcGxldGlvbgogICAgIQogICAgYXNzZXJ0IC8vIE9uQ29tcGxldGlvbiBpcyBub3QgTm9PcAogICAgdHhuIEFwcGxpY2F0aW9uSUQKICAgIGFzc2VydCAvLyBjYW4gb25seSBjYWxsIHdoZW4gbm90IGNyZWF0aW5nCiAgICBjYWxsc3ViIG1hbmFnZXIKICAgIGJ5dGVjIDQgLy8gMHgxNTFmN2M3NQogICAgc3dhcAogICAgY29uY2F0CiAgICBsb2cKICAgIGludGNfMCAvLyAxCiAgICByZXR1cm4KCm1haW5fZGVsZXRlTWFuYWdlcl9yb3V0ZUAxMzoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6NDQKICAgIC8vIHB1YmxpYyBkZWxldGVNYW5hZ2VyKCk6IHZvaWQgewogICAgdHhuIE9uQ29tcGxldGlvbgogICAgIQogICAgYXNzZXJ0IC8vIE9uQ29tcGxldGlvbiBpcyBub3QgTm9PcAogICAgdHhuIEFwcGxpY2F0aW9uSUQKICAgIGFzc2VydCAvLyBjYW4gb25seSBjYWxsIHdoZW4gbm90IGNyZWF0aW5nCiAgICBjYWxsc3ViIGRlbGV0ZU1hbmFnZXIKICAgIGludGNfMCAvLyAxCiAgICByZXR1cm4KCm1haW5fdXBkYXRlTWFuYWdlcl9yb3V0ZUAxMjoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6MzEKICAgIC8vIHB1YmxpYyB1cGRhdGVNYW5hZ2VyKG5ld01hbmFnZXI6IGFyYzQuQWRkcmVzcyk6IHZvaWQgewogICAgdHhuIE9uQ29tcGxldGlvbgogICAgIQogICAgYXNzZXJ0IC8vIE9uQ29tcGxldGlvbiBpcyBub3QgTm9PcAogICAgdHhuIEFwcGxpY2F0aW9uSUQKICAgIGFzc2VydCAvLyBjYW4gb25seSBjYWxsIHdoZW4gbm90IGNyZWF0aW5nCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo0Ni00NwogICAgLy8gQGNvbnRyYWN0KHsgbmFtZTogJ1JhbmRvbW5lc3NCZWFjb24nLCBhdm1WZXJzaW9uOiAxMSB9KQogICAgLy8gZXhwb3J0IGNsYXNzIFJhbmRvbW5lc3NCZWFjb24gZXh0ZW5kcyBjbGFzc2VzKE1hbmFnYWJsZSwgUGF1c2FibGUsIENvbnRyYWN0KSBpbXBsZW1lbnRzIGFyYzQuQ29udmVudGlvbmFsUm91dGluZyB7CiAgICB0eG5hIEFwcGxpY2F0aW9uQXJncyAxCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL21hbmFnYWJsZS5hbGdvLnRzOjMxCiAgICAvLyBwdWJsaWMgdXBkYXRlTWFuYWdlcihuZXdNYW5hZ2VyOiBhcmM0LkFkZHJlc3MpOiB2b2lkIHsKICAgIGNhbGxzdWIgdXBkYXRlTWFuYWdlcgogICAgaW50Y18wIC8vIDEKICAgIHJldHVybgoKbWFpbl9nZXRDb3N0c19yb3V0ZUAxMToKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI4OQogICAgLy8gQGFiaW1ldGhvZCh7IHJlYWRvbmx5OiB0cnVlIH0pCiAgICB0eG4gT25Db21wbGV0aW9uCiAgICAhCiAgICBhc3NlcnQgLy8gT25Db21wbGV0aW9uIGlzIG5vdCBOb09wCiAgICB0eG4gQXBwbGljYXRpb25JRAogICAgYXNzZXJ0IC8vIGNhbiBvbmx5IGNhbGwgd2hlbiBub3QgY3JlYXRpbmcKICAgIGNhbGxzdWIgZ2V0Q29zdHMKICAgIGJ5dGVjIDQgLy8gMHgxNTFmN2M3NQogICAgc3dhcAogICAgY29uY2F0CiAgICBsb2cKICAgIGludGNfMCAvLyAxCiAgICByZXR1cm4KCm1haW5fY29tcGxldGVSZXF1ZXN0X3JvdXRlQDEwOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjMwCiAgICAvLyBwdWJsaWMgY29tcGxldGVSZXF1ZXN0KHJlcXVlc3RJZDogYXJjNC5VaW50TjY0LCBwcm9vZjogYXJjNC5TdGF0aWNCeXRlczw4MD4pOiB2b2lkIHsKICAgIHR4biBPbkNvbXBsZXRpb24KICAgICEKICAgIGFzc2VydCAvLyBPbkNvbXBsZXRpb24gaXMgbm90IE5vT3AKICAgIHR4biBBcHBsaWNhdGlvbklECiAgICBhc3NlcnQgLy8gY2FuIG9ubHkgY2FsbCB3aGVuIG5vdCBjcmVhdGluZwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NDYtNDcKICAgIC8vIEBjb250cmFjdCh7IG5hbWU6ICdSYW5kb21uZXNzQmVhY29uJywgYXZtVmVyc2lvbjogMTEgfSkKICAgIC8vIGV4cG9ydCBjbGFzcyBSYW5kb21uZXNzQmVhY29uIGV4dGVuZHMgY2xhc3NlcyhNYW5hZ2FibGUsIFBhdXNhYmxlLCBDb250cmFjdCkgaW1wbGVtZW50cyBhcmM0LkNvbnZlbnRpb25hbFJvdXRpbmcgewogICAgdHhuYSBBcHBsaWNhdGlvbkFyZ3MgMQogICAgdHhuYSBBcHBsaWNhdGlvbkFyZ3MgMgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjMwCiAgICAvLyBwdWJsaWMgY29tcGxldGVSZXF1ZXN0KHJlcXVlc3RJZDogYXJjNC5VaW50TjY0LCBwcm9vZjogYXJjNC5TdGF0aWNCeXRlczw4MD4pOiB2b2lkIHsKICAgIGNhbGxzdWIgY29tcGxldGVSZXF1ZXN0CiAgICBpbnRjXzAgLy8gMQogICAgcmV0dXJuCgptYWluX2NhbmNlbFJlcXVlc3Rfcm91dGVAOToKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE3MgogICAgLy8gcHVibGljIGNhbmNlbFJlcXVlc3QocmVxdWVzdElkOiBhcmM0LlVpbnRONjQpOiB2b2lkIHsKICAgIHR4biBPbkNvbXBsZXRpb24KICAgICEKICAgIGFzc2VydCAvLyBPbkNvbXBsZXRpb24gaXMgbm90IE5vT3AKICAgIHR4biBBcHBsaWNhdGlvbklECiAgICBhc3NlcnQgLy8gY2FuIG9ubHkgY2FsbCB3aGVuIG5vdCBjcmVhdGluZwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NDYtNDcKICAgIC8vIEBjb250cmFjdCh7IG5hbWU6ICdSYW5kb21uZXNzQmVhY29uJywgYXZtVmVyc2lvbjogMTEgfSkKICAgIC8vIGV4cG9ydCBjbGFzcyBSYW5kb21uZXNzQmVhY29uIGV4dGVuZHMgY2xhc3NlcyhNYW5hZ2FibGUsIFBhdXNhYmxlLCBDb250cmFjdCkgaW1wbGVtZW50cyBhcmM0LkNvbnZlbnRpb25hbFJvdXRpbmcgewogICAgdHhuYSBBcHBsaWNhdGlvbkFyZ3MgMQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTcyCiAgICAvLyBwdWJsaWMgY2FuY2VsUmVxdWVzdChyZXF1ZXN0SWQ6IGFyYzQuVWludE42NCk6IHZvaWQgewogICAgY2FsbHN1YiBjYW5jZWxSZXF1ZXN0CiAgICBpbnRjXzAgLy8gMQogICAgcmV0dXJuCgptYWluX2NyZWF0ZVJlcXVlc3Rfcm91dGVAODoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjEwNy0xMTEKICAgIC8vIHB1YmxpYyBjcmVhdGVSZXF1ZXN0KAogICAgLy8gICByZXF1ZXN0ZXJBZGRyZXNzOiBhcmM0LkFkZHJlc3MsCiAgICAvLyAgIHJvdW5kOiBhcmM0LlVpbnRONjQsCiAgICAvLyAgIGNvc3RzUGF5bWVudDogZ3R4bi5QYXltZW50VHhuLAogICAgLy8gKTogYXJjNC5VaW50TjY0IHsKICAgIHR4biBPbkNvbXBsZXRpb24KICAgICEKICAgIGFzc2VydCAvLyBPbkNvbXBsZXRpb24gaXMgbm90IE5vT3AKICAgIHR4biBBcHBsaWNhdGlvbklECiAgICBhc3NlcnQgLy8gY2FuIG9ubHkgY2FsbCB3aGVuIG5vdCBjcmVhdGluZwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NDYtNDcKICAgIC8vIEBjb250cmFjdCh7IG5hbWU6ICdSYW5kb21uZXNzQmVhY29uJywgYXZtVmVyc2lvbjogMTEgfSkKICAgIC8vIGV4cG9ydCBjbGFzcyBSYW5kb21uZXNzQmVhY29uIGV4dGVuZHMgY2xhc3NlcyhNYW5hZ2FibGUsIFBhdXNhYmxlLCBDb250cmFjdCkgaW1wbGVtZW50cyBhcmM0LkNvbnZlbnRpb25hbFJvdXRpbmcgewogICAgdHhuYSBBcHBsaWNhdGlvbkFyZ3MgMQogICAgdHhuYSBBcHBsaWNhdGlvbkFyZ3MgMgogICAgdHhuIEdyb3VwSW5kZXgKICAgIGludGNfMCAvLyAxCiAgICAtCiAgICBkdXAKICAgIGd0eG5zIFR5cGVFbnVtCiAgICBpbnRjXzAgLy8gcGF5CiAgICA9PQogICAgYXNzZXJ0IC8vIHRyYW5zYWN0aW9uIHR5cGUgaXMgcGF5CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMDctMTExCiAgICAvLyBwdWJsaWMgY3JlYXRlUmVxdWVzdCgKICAgIC8vICAgcmVxdWVzdGVyQWRkcmVzczogYXJjNC5BZGRyZXNzLAogICAgLy8gICByb3VuZDogYXJjNC5VaW50TjY0LAogICAgLy8gICBjb3N0c1BheW1lbnQ6IGd0eG4uUGF5bWVudFR4biwKICAgIC8vICk6IGFyYzQuVWludE42NCB7CiAgICBjYWxsc3ViIGNyZWF0ZVJlcXVlc3QKICAgIGJ5dGVjIDQgLy8gMHgxNTFmN2M3NQogICAgc3dhcAogICAgY29uY2F0CiAgICBsb2cKICAgIGludGNfMCAvLyAxCiAgICByZXR1cm4KCm1haW5fZGVsZXRlQXBwbGljYXRpb25fcm91dGVANzoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjg3CiAgICAvLyBkZWxldGVBcHBsaWNhdGlvbigpOiB2b2lkIHsKICAgIHR4biBPbkNvbXBsZXRpb24KICAgIGludGNfMiAvLyBEZWxldGVBcHBsaWNhdGlvbgogICAgPT0KICAgIGFzc2VydCAvLyBPbkNvbXBsZXRpb24gaXMgbm90IERlbGV0ZUFwcGxpY2F0aW9uCiAgICB0eG4gQXBwbGljYXRpb25JRAogICAgYXNzZXJ0IC8vIGNhbiBvbmx5IGNhbGwgd2hlbiBub3QgY3JlYXRpbmcKICAgIGNhbGxzdWIgZGVsZXRlQXBwbGljYXRpb24KICAgIGludGNfMCAvLyAxCiAgICByZXR1cm4KCm1haW5fdXBkYXRlQXBwbGljYXRpb25fcm91dGVANjoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjgyCiAgICAvLyB1cGRhdGVBcHBsaWNhdGlvbigpOiB2b2lkIHsKICAgIHR4biBPbkNvbXBsZXRpb24KICAgIHB1c2hpbnQgNCAvLyBVcGRhdGVBcHBsaWNhdGlvbgogICAgPT0KICAgIGFzc2VydCAvLyBPbkNvbXBsZXRpb24gaXMgbm90IFVwZGF0ZUFwcGxpY2F0aW9uCiAgICB0eG4gQXBwbGljYXRpb25JRAogICAgYXNzZXJ0IC8vIGNhbiBvbmx5IGNhbGwgd2hlbiBub3QgY3JlYXRpbmcKICAgIGNhbGxzdWIgdXBkYXRlQXBwbGljYXRpb24KICAgIGludGNfMCAvLyAxCiAgICByZXR1cm4KCm1haW5fY3JlYXRlQXBwbGljYXRpb25fcm91dGVANToKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjc2CiAgICAvLyBjcmVhdGVBcHBsaWNhdGlvbihwdWJsaWNLZXk6IGFyYzQuU3RhdGljQnl0ZXM8MzI+KTogdm9pZCB7CiAgICB0eG4gT25Db21wbGV0aW9uCiAgICAhCiAgICBhc3NlcnQgLy8gT25Db21wbGV0aW9uIGlzIG5vdCBOb09wCiAgICB0eG4gQXBwbGljYXRpb25JRAogICAgIQogICAgYXNzZXJ0IC8vIGNhbiBvbmx5IGNhbGwgd2hlbiBjcmVhdGluZwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NDYtNDcKICAgIC8vIEBjb250cmFjdCh7IG5hbWU6ICdSYW5kb21uZXNzQmVhY29uJywgYXZtVmVyc2lvbjogMTEgfSkKICAgIC8vIGV4cG9ydCBjbGFzcyBSYW5kb21uZXNzQmVhY29uIGV4dGVuZHMgY2xhc3NlcyhNYW5hZ2FibGUsIFBhdXNhYmxlLCBDb250cmFjdCkgaW1wbGVtZW50cyBhcmM0LkNvbnZlbnRpb25hbFJvdXRpbmcgewogICAgdHhuYSBBcHBsaWNhdGlvbkFyZ3MgMQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NzYKICAgIC8vIGNyZWF0ZUFwcGxpY2F0aW9uKHB1YmxpY0tleTogYXJjNC5TdGF0aWNCeXRlczwzMj4pOiB2b2lkIHsKICAgIGNhbGxzdWIgY3JlYXRlQXBwbGljYXRpb24KICAgIGludGNfMCAvLyAxCiAgICByZXR1cm4KCgovLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo6UmFuZG9tbmVzc0JlYWNvbi5kZWxldGVSZXF1ZXN0KHJlcXVlc3RJZDogYnl0ZXMpIC0+IHZvaWQ6CmRlbGV0ZVJlcXVlc3Q6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo2NQogICAgLy8gcHJpdmF0ZSBkZWxldGVSZXF1ZXN0KHJlcXVlc3RJZDogYXJjNC5VaW50TjY0KTogdm9pZCB7CiAgICBwcm90byAxIDAKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjU4CiAgICAvLyB0b3RhbFBlbmRpbmdSZXF1ZXN0cyA9IEdsb2JhbFN0YXRlPGFyYzQuVWludE42ND4oeyBrZXk6ICd0b3RhbFBlbmRpbmdSZXF1ZXN0cycsIGluaXRpYWxWYWx1ZTogbmV3IGFyYzQuVWludE42NCgwKSB9KQogICAgaW50Y18xIC8vIDAKICAgIGJ5dGVjXzAgLy8gInRvdGFsUGVuZGluZ1JlcXVlc3RzIgogICAgYXBwX2dsb2JhbF9nZXRfZXgKICAgIGFzc2VydCAvLyBjaGVjayBHbG9iYWxTdGF0ZSBleGlzdHMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjY3CiAgICAvLyB0aGlzLnRvdGFsUGVuZGluZ1JlcXVlc3RzLnZhbHVlID0gbmV3IGFyYzQuVWludE42NCh0aGlzLnRvdGFsUGVuZGluZ1JlcXVlc3RzLnZhbHVlLm5hdGl2ZSAtIDEpCiAgICBidG9pCiAgICBpbnRjXzAgLy8gMQogICAgLQogICAgaXRvYgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NTgKICAgIC8vIHRvdGFsUGVuZGluZ1JlcXVlc3RzID0gR2xvYmFsU3RhdGU8YXJjNC5VaW50TjY0Pih7IGtleTogJ3RvdGFsUGVuZGluZ1JlcXVlc3RzJywgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5VaW50TjY0KDApIH0pCiAgICBieXRlY18wIC8vICJ0b3RhbFBlbmRpbmdSZXF1ZXN0cyIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjY3CiAgICAvLyB0aGlzLnRvdGFsUGVuZGluZ1JlcXVlc3RzLnZhbHVlID0gbmV3IGFyYzQuVWludE42NCh0aGlzLnRvdGFsUGVuZGluZ1JlcXVlc3RzLnZhbHVlLm5hdGl2ZSAtIDEpCiAgICBzd2FwCiAgICBhcHBfZ2xvYmFsX3B1dAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NTUKICAgIC8vIHJlcXVlc3RzID0gQm94TWFwPGFyYzQuVWludE42NCwgUmFuZG9tbmVzc1JlcXVlc3Q+KHsga2V5UHJlZml4OiAncmVxdWVzdHMnIH0pCiAgICBieXRlYyA1IC8vICJyZXF1ZXN0cyIKICAgIGZyYW1lX2RpZyAtMQogICAgY29uY2F0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo2OQogICAgLy8gdGhpcy5yZXF1ZXN0cyhyZXF1ZXN0SWQpLmRlbGV0ZSgpCiAgICBib3hfZGVsCiAgICBwb3AKICAgIHJldHN1YgoKCi8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjpSYW5kb21uZXNzQmVhY29uLmNyZWF0ZUFwcGxpY2F0aW9uKHB1YmxpY0tleTogYnl0ZXMpIC0+IHZvaWQ6CmNyZWF0ZUFwcGxpY2F0aW9uOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NzYKICAgIC8vIGNyZWF0ZUFwcGxpY2F0aW9uKHB1YmxpY0tleTogYXJjNC5TdGF0aWNCeXRlczwzMj4pOiB2b2lkIHsKICAgIHByb3RvIDEgMAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NDkKICAgIC8vIHB1YmxpY0tleSA9IEdsb2JhbFN0YXRlPGFyYzQuU3RhdGljQnl0ZXM8MzI+Pih7IGtleTogJ3B1YmxpY0tleScgfSkKICAgIGJ5dGVjIDcgLy8gInB1YmxpY0tleSIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjc4CiAgICAvLyB0aGlzLnB1YmxpY0tleS52YWx1ZSA9IHB1YmxpY0tleQogICAgZnJhbWVfZGlnIC0xCiAgICBhcHBfZ2xvYmFsX3B1dAogICAgcmV0c3ViCgoKLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6OlJhbmRvbW5lc3NCZWFjb24udXBkYXRlQXBwbGljYXRpb24oKSAtPiB2b2lkOgp1cGRhdGVBcHBsaWNhdGlvbjoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjgzCiAgICAvLyB0aGlzLm9ubHlNYW5hZ2VyKCkKICAgIGNhbGxzdWIgb25seU1hbmFnZXIKICAgIHJldHN1YgoKCi8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjpSYW5kb21uZXNzQmVhY29uLmRlbGV0ZUFwcGxpY2F0aW9uKCkgLT4gdm9pZDoKZGVsZXRlQXBwbGljYXRpb246CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo4OAogICAgLy8gdGhpcy5vbmx5TWFuYWdlcigpCiAgICBjYWxsc3ViIG9ubHlNYW5hZ2VyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo1OAogICAgLy8gdG90YWxQZW5kaW5nUmVxdWVzdHMgPSBHbG9iYWxTdGF0ZTxhcmM0LlVpbnRONjQ+KHsga2V5OiAndG90YWxQZW5kaW5nUmVxdWVzdHMnLCBpbml0aWFsVmFsdWU6IG5ldyBhcmM0LlVpbnRONjQoMCkgfSkKICAgIGludGNfMSAvLyAwCiAgICBieXRlY18wIC8vICJ0b3RhbFBlbmRpbmdSZXF1ZXN0cyIKICAgIGFwcF9nbG9iYWxfZ2V0X2V4CiAgICBhc3NlcnQgLy8gY2hlY2sgR2xvYmFsU3RhdGUgZXhpc3RzCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo5MAogICAgLy8gYXNzZXJ0KHRoaXMudG90YWxQZW5kaW5nUmVxdWVzdHMudmFsdWUubmF0aXZlID09PSAwLCBFUlJfTk9fUEVORElOR19SRVFVRVNUUykKICAgIGJ0b2kKICAgICEKICAgIGFzc2VydCAvLyBubyBwZW5kaW5nIHJlcXVlc3RzCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo5Mi05NwogICAgLy8gaXR4bgogICAgLy8gICAucGF5bWVudCh7CiAgICAvLyAgICAgY2xvc2VSZW1haW5kZXJUbzogdGhpcy5tYW5hZ2VyKCkubmF0aXZlLAogICAgLy8gICAgIG5vdGU6IE5PVEVfQ0xPU0VfT1VUX1JFTUFJTkRFUiwKICAgIC8vICAgfSkKICAgIC8vICAgLnN1Ym1pdCgpCiAgICBpdHhuX2JlZ2luCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo5NAogICAgLy8gY2xvc2VSZW1haW5kZXJUbzogdGhpcy5tYW5hZ2VyKCkubmF0aXZlLAogICAgY2FsbHN1YiBtYW5hZ2VyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vdHlwZXMuYWxnby50czoxNwogICAgLy8gZXhwb3J0IGNvbnN0IE5PVEVfQ0xPU0VfT1VUX1JFTUFJTkRFUiA9ICdjbG9zZSBvdXQgcmVtYWluZGVyIHRvIG1hbmFnZXInCiAgICBwdXNoYnl0ZXMgImNsb3NlIG91dCByZW1haW5kZXIgdG8gbWFuYWdlciIKICAgIGl0eG5fZmllbGQgTm90ZQogICAgaXR4bl9maWVsZCBDbG9zZVJlbWFpbmRlclRvCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo5Mi05NgogICAgLy8gaXR4bgogICAgLy8gICAucGF5bWVudCh7CiAgICAvLyAgICAgY2xvc2VSZW1haW5kZXJUbzogdGhpcy5tYW5hZ2VyKCkubmF0aXZlLAogICAgLy8gICAgIG5vdGU6IE5PVEVfQ0xPU0VfT1VUX1JFTUFJTkRFUiwKICAgIC8vICAgfSkKICAgIGludGNfMCAvLyAxCiAgICBpdHhuX2ZpZWxkIFR5cGVFbnVtCiAgICBpbnRjXzEgLy8gMAogICAgaXR4bl9maWVsZCBGZWUKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjkyLTk3CiAgICAvLyBpdHhuCiAgICAvLyAgIC5wYXltZW50KHsKICAgIC8vICAgICBjbG9zZVJlbWFpbmRlclRvOiB0aGlzLm1hbmFnZXIoKS5uYXRpdmUsCiAgICAvLyAgICAgbm90ZTogTk9URV9DTE9TRV9PVVRfUkVNQUlOREVSLAogICAgLy8gICB9KQogICAgLy8gICAuc3VibWl0KCkKICAgIGl0eG5fc3VibWl0CiAgICByZXRzdWIKCgovLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo6UmFuZG9tbmVzc0JlYWNvbi5jcmVhdGVSZXF1ZXN0KHJlcXVlc3RlckFkZHJlc3M6IGJ5dGVzLCByb3VuZDogYnl0ZXMsIGNvc3RzUGF5bWVudDogdWludDY0KSAtPiBieXRlczoKY3JlYXRlUmVxdWVzdDoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjEwNy0xMTEKICAgIC8vIHB1YmxpYyBjcmVhdGVSZXF1ZXN0KAogICAgLy8gICByZXF1ZXN0ZXJBZGRyZXNzOiBhcmM0LkFkZHJlc3MsCiAgICAvLyAgIHJvdW5kOiBhcmM0LlVpbnRONjQsCiAgICAvLyAgIGNvc3RzUGF5bWVudDogZ3R4bi5QYXltZW50VHhuLAogICAgLy8gKTogYXJjNC5VaW50TjY0IHsKICAgIHByb3RvIDMgMQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjEzCiAgICAvLyBwYXVzZWQgPSBHbG9iYWxTdGF0ZTxhcmM0LkJvb2w+KHsga2V5OiAncGF1c2VkJywgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5Cb29sKGZhbHNlKSB9KQogICAgaW50Y18xIC8vIDAKICAgIGJ5dGVjXzMgLy8gInBhdXNlZCIKICAgIGFwcF9nbG9iYWxfZ2V0X2V4CiAgICBhc3NlcnQgLy8gY2hlY2sgR2xvYmFsU3RhdGUgZXhpc3RzCiAgICBpbnRjXzEgLy8gMAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjE2CiAgICAvLyBhc3NlcnQoIXRoaXMucGF1c2VkLnZhbHVlLm5hdGl2ZSkKICAgIGdldGJpdAogICAgIQogICAgYXNzZXJ0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo1OAogICAgLy8gdG90YWxQZW5kaW5nUmVxdWVzdHMgPSBHbG9iYWxTdGF0ZTxhcmM0LlVpbnRONjQ+KHsga2V5OiAndG90YWxQZW5kaW5nUmVxdWVzdHMnLCBpbml0aWFsVmFsdWU6IG5ldyBhcmM0LlVpbnRONjQoMCkgfSkKICAgIGludGNfMSAvLyAwCiAgICBieXRlY18wIC8vICJ0b3RhbFBlbmRpbmdSZXF1ZXN0cyIKICAgIGFwcF9nbG9iYWxfZ2V0X2V4CiAgICBhc3NlcnQgLy8gY2hlY2sgR2xvYmFsU3RhdGUgZXhpc3RzCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMTUKICAgIC8vIGFzc2VydCh0aGlzLnRvdGFsUGVuZGluZ1JlcXVlc3RzLnZhbHVlLm5hdGl2ZSA8IE1BWF9QRU5ESU5HX1JFUVVFU1RTLCBFUlJfTUFYX1BFTkRJTkdfUkVRVUVTVFMpCiAgICBidG9pCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vdHlwZXMuYWxnby50czoyMAogICAgLy8gZXhwb3J0IGNvbnN0IE1BWF9QRU5ESU5HX1JFUVVFU1RTOiB1aW50NjQgPSA1CiAgICBpbnRjXzIgLy8gNQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTE1CiAgICAvLyBhc3NlcnQodGhpcy50b3RhbFBlbmRpbmdSZXF1ZXN0cy52YWx1ZS5uYXRpdmUgPCBNQVhfUEVORElOR19SRVFVRVNUUywgRVJSX01BWF9QRU5ESU5HX1JFUVVFU1RTKQogICAgPAogICAgYXNzZXJ0IC8vIGNhbm5vdCBleGNlZWQgbWF4IHBlbmRpbmcgcmVxdWVzdHMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjExNwogICAgLy8gYXNzZXJ0KHJvdW5kLm5hdGl2ZSA+IEdsb2JhbC5yb3VuZCwgRVJSX01VU1RfQkVfRlVUVVJFX1JPVU5EKQogICAgZnJhbWVfZGlnIC0yCiAgICBidG9pCiAgICBnbG9iYWwgUm91bmQKICAgID4KICAgIGFzc2VydCAvLyBtdXN0IGJlIGEgZnV0dXJlIHJvdW5kCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMTkKICAgIC8vIGNvbnN0IGNhbGxlckFwcElkID0gR2xvYmFsLmNhbGxlckFwcGxpY2F0aW9uSWQKICAgIGdsb2JhbCBDYWxsZXJBcHBsaWNhdGlvbklECiAgICBkdXAKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjEyMQogICAgLy8gYXNzZXJ0KGNhbGxlckFwcElkICE9PSAwLCBFUlJfTVVTVF9CRV9DQUxMRURfRlJPTV9BUFApCiAgICBhc3NlcnQgLy8gbXVzdCBiZSBjYWxsZWQgYnkgYW4gYXBwbGljYXRpb24KICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjEyMwogICAgLy8gY29uc3QgW3R4bkZlZXMsIGJveENvc3RdID0gdGhpcy5nZXRDb3N0cygpLm5hdGl2ZQogICAgY2FsbHN1YiBnZXRDb3N0cwogICAgZHVwCiAgICBleHRyYWN0IDggOCAvLyBvbiBlcnJvcjogSW5kZXggYWNjZXNzIGlzIG91dCBvZiBib3VuZHMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjEyNi0xMzYKICAgIC8vIGFzc2VydE1hdGNoKAogICAgLy8gICBjb3N0c1BheW1lbnQsCiAgICAvLyAgIHsKICAgIC8vICAgICByZWNlaXZlcjogR2xvYmFsLmN1cnJlbnRBcHBsaWNhdGlvbkFkZHJlc3MsCiAgICAvLyAgICAgYW1vdW50OiB7CiAgICAvLyAgICAgICAvLyBzaG91bGQgY292ZXIgdGhlIHJlcXVpcmVkIGZlZXMgKyBib3ggc3RvcmFnZSBjb3N0ICh3aWxsIGJlIHJlZnVuZGVkKQogICAgLy8gICAgICAgZ3JlYXRlclRoYW5FcTogdHhuRmVlcy5uYXRpdmUgKyBib3hDb3N0Lm5hdGl2ZSwKICAgIC8vICAgICB9LAogICAgLy8gICB9LAogICAgLy8gICBFUlJfQ09TVFNfUEFZTUVOVF9NVVNUX0JFX1ZBTElELAogICAgLy8gKQogICAgZnJhbWVfZGlnIC0xCiAgICBndHhucyBSZWNlaXZlcgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTI5CiAgICAvLyByZWNlaXZlcjogR2xvYmFsLmN1cnJlbnRBcHBsaWNhdGlvbkFkZHJlc3MsCiAgICBnbG9iYWwgQ3VycmVudEFwcGxpY2F0aW9uQWRkcmVzcwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTI2LTEzNgogICAgLy8gYXNzZXJ0TWF0Y2goCiAgICAvLyAgIGNvc3RzUGF5bWVudCwKICAgIC8vICAgewogICAgLy8gICAgIHJlY2VpdmVyOiBHbG9iYWwuY3VycmVudEFwcGxpY2F0aW9uQWRkcmVzcywKICAgIC8vICAgICBhbW91bnQ6IHsKICAgIC8vICAgICAgIC8vIHNob3VsZCBjb3ZlciB0aGUgcmVxdWlyZWQgZmVlcyArIGJveCBzdG9yYWdlIGNvc3QgKHdpbGwgYmUgcmVmdW5kZWQpCiAgICAvLyAgICAgICBncmVhdGVyVGhhbkVxOiB0eG5GZWVzLm5hdGl2ZSArIGJveENvc3QubmF0aXZlLAogICAgLy8gICAgIH0sCiAgICAvLyAgIH0sCiAgICAvLyAgIEVSUl9DT1NUU19QQVlNRU5UX01VU1RfQkVfVkFMSUQsCiAgICAvLyApCiAgICA9PQogICAgYnogY3JlYXRlUmVxdWVzdF9ib29sX2ZhbHNlQDMKICAgIGZyYW1lX2RpZyAtMQogICAgZ3R4bnMgQW1vdW50CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMzIKICAgIC8vIGdyZWF0ZXJUaGFuRXE6IHR4bkZlZXMubmF0aXZlICsgYm94Q29zdC5uYXRpdmUsCiAgICBmcmFtZV9kaWcgMQogICAgZHVwCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMjMKICAgIC8vIGNvbnN0IFt0eG5GZWVzLCBib3hDb3N0XSA9IHRoaXMuZ2V0Q29zdHMoKS5uYXRpdmUKICAgIGludGNfMSAvLyAwCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMzIKICAgIC8vIGdyZWF0ZXJUaGFuRXE6IHR4bkZlZXMubmF0aXZlICsgYm94Q29zdC5uYXRpdmUsCiAgICBleHRyYWN0X3VpbnQ2NAogICAgc3dhcAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTIzCiAgICAvLyBjb25zdCBbdHhuRmVlcywgYm94Q29zdF0gPSB0aGlzLmdldENvc3RzKCkubmF0aXZlCiAgICBpbnRjXzMgLy8gOAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTMyCiAgICAvLyBncmVhdGVyVGhhbkVxOiB0eG5GZWVzLm5hdGl2ZSArIGJveENvc3QubmF0aXZlLAogICAgZXh0cmFjdF91aW50NjQKICAgICsKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjEyNi0xMzYKICAgIC8vIGFzc2VydE1hdGNoKAogICAgLy8gICBjb3N0c1BheW1lbnQsCiAgICAvLyAgIHsKICAgIC8vICAgICByZWNlaXZlcjogR2xvYmFsLmN1cnJlbnRBcHBsaWNhdGlvbkFkZHJlc3MsCiAgICAvLyAgICAgYW1vdW50OiB7CiAgICAvLyAgICAgICAvLyBzaG91bGQgY292ZXIgdGhlIHJlcXVpcmVkIGZlZXMgKyBib3ggc3RvcmFnZSBjb3N0ICh3aWxsIGJlIHJlZnVuZGVkKQogICAgLy8gICAgICAgZ3JlYXRlclRoYW5FcTogdHhuRmVlcy5uYXRpdmUgKyBib3hDb3N0Lm5hdGl2ZSwKICAgIC8vICAgICB9LAogICAgLy8gICB9LAogICAgLy8gICBFUlJfQ09TVFNfUEFZTUVOVF9NVVNUX0JFX1ZBTElELAogICAgLy8gKQogICAgPj0KICAgIGJ6IGNyZWF0ZVJlcXVlc3RfYm9vbF9mYWxzZUAzCiAgICBpbnRjXzAgLy8gMQoKY3JlYXRlUmVxdWVzdF9ib29sX21lcmdlQDQ6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMjYtMTM2CiAgICAvLyBhc3NlcnRNYXRjaCgKICAgIC8vICAgY29zdHNQYXltZW50LAogICAgLy8gICB7CiAgICAvLyAgICAgcmVjZWl2ZXI6IEdsb2JhbC5jdXJyZW50QXBwbGljYXRpb25BZGRyZXNzLAogICAgLy8gICAgIGFtb3VudDogewogICAgLy8gICAgICAgLy8gc2hvdWxkIGNvdmVyIHRoZSByZXF1aXJlZCBmZWVzICsgYm94IHN0b3JhZ2UgY29zdCAod2lsbCBiZSByZWZ1bmRlZCkKICAgIC8vICAgICAgIGdyZWF0ZXJUaGFuRXE6IHR4bkZlZXMubmF0aXZlICsgYm94Q29zdC5uYXRpdmUsCiAgICAvLyAgICAgfSwKICAgIC8vICAgfSwKICAgIC8vICAgRVJSX0NPU1RTX1BBWU1FTlRfTVVTVF9CRV9WQUxJRCwKICAgIC8vICkKICAgIGFzc2VydCAvLyBjb3N0cyBwYXltZW50IG11c3QgYmUgdmFsaWQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjEzOQogICAgLy8gY29uc3QgZmVlc1BhaWQ6IHVpbnQ2NCA9IGNvc3RzUGF5bWVudC5hbW91bnQgLSBib3hDb3N0Lm5hdGl2ZQogICAgZnJhbWVfZGlnIC0xCiAgICBndHhucyBBbW91bnQKICAgIGZyYW1lX2RpZyAxCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMjMKICAgIC8vIGNvbnN0IFt0eG5GZWVzLCBib3hDb3N0XSA9IHRoaXMuZ2V0Q29zdHMoKS5uYXRpdmUKICAgIGludGNfMyAvLyA4CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMzkKICAgIC8vIGNvbnN0IGZlZXNQYWlkOiB1aW50NjQgPSBjb3N0c1BheW1lbnQuYW1vdW50IC0gYm94Q29zdC5uYXRpdmUKICAgIGV4dHJhY3RfdWludDY0CiAgICAtCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNDIKICAgIC8vIGNyZWF0ZWRBdDogbmV3IGFyYzQuVWludE42NChHbG9iYWwucm91bmQpLAogICAgZ2xvYmFsIFJvdW5kCiAgICBpdG9iCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNDMKICAgIC8vIHJlcXVlc3RlckFwcElkOiBuZXcgYXJjNC5VaW50TjY0KGNhbGxlckFwcElkKSwKICAgIGZyYW1lX2RpZyAwCiAgICBpdG9iCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNDYKICAgIC8vIGZlZVBhaWQ6IG5ldyBhcmM0LlVpbnRONjQoZmVlc1BhaWQpLAogICAgdW5jb3ZlciAyCiAgICBpdG9iCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNDEtMTQ4CiAgICAvLyBjb25zdCByZXF1ZXN0ID0gbmV3IFJhbmRvbW5lc3NSZXF1ZXN0KHsKICAgIC8vICAgY3JlYXRlZEF0OiBuZXcgYXJjNC5VaW50TjY0KEdsb2JhbC5yb3VuZCksCiAgICAvLyAgIHJlcXVlc3RlckFwcElkOiBuZXcgYXJjNC5VaW50TjY0KGNhbGxlckFwcElkKSwKICAgIC8vICAgcmVxdWVzdGVyQWRkcmVzczogcmVxdWVzdGVyQWRkcmVzcywKICAgIC8vICAgcm91bmQ6IHJvdW5kLAogICAgLy8gICBmZWVQYWlkOiBuZXcgYXJjNC5VaW50TjY0KGZlZXNQYWlkKSwKICAgIC8vICAgYm94Q29zdDogYm94Q29zdCwKICAgIC8vIH0pCiAgICB1bmNvdmVyIDIKICAgIGRpZyAyCiAgICBjb25jYXQKICAgIGZyYW1lX2RpZyAtMwogICAgY29uY2F0CiAgICBmcmFtZV9kaWcgLTIKICAgIGNvbmNhdAogICAgc3dhcAogICAgY29uY2F0CiAgICBmcmFtZV9kaWcgMgogICAgY29uY2F0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo1MgogICAgLy8gY3VycmVudFJlcXVlc3RJZCA9IEdsb2JhbFN0YXRlPGFyYzQuVWludE42ND4oeyBrZXk6ICdjdXJyZW50UmVxdWVzdElkJywgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5VaW50TjY0KDEpIH0pCiAgICBpbnRjXzEgLy8gMAogICAgYnl0ZWMgNiAvLyAiY3VycmVudFJlcXVlc3RJZCIKICAgIGFwcF9nbG9iYWxfZ2V0X2V4CiAgICBhc3NlcnQgLy8gY2hlY2sgR2xvYmFsU3RhdGUgZXhpc3RzCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo1NQogICAgLy8gcmVxdWVzdHMgPSBCb3hNYXA8YXJjNC5VaW50TjY0LCBSYW5kb21uZXNzUmVxdWVzdD4oeyBrZXlQcmVmaXg6ICdyZXF1ZXN0cycgfSkKICAgIGJ5dGVjIDUgLy8gInJlcXVlc3RzIgogICAgZGlnIDEKICAgIGNvbmNhdAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTUzCiAgICAvLyB0aGlzLnJlcXVlc3RzKHJlcXVlc3RJZCkudmFsdWUgPSByZXF1ZXN0LmNvcHkoKQogICAgdW5jb3ZlciAyCiAgICBib3hfcHV0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNTUKICAgIC8vIHRoaXMuY3VycmVudFJlcXVlc3RJZC52YWx1ZSA9IG5ldyBhcmM0LlVpbnRONjQocmVxdWVzdElkLm5hdGl2ZSArIDEpCiAgICBkdXAKICAgIGJ0b2kKICAgIGludGNfMCAvLyAxCiAgICArCiAgICBpdG9iCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo1MgogICAgLy8gY3VycmVudFJlcXVlc3RJZCA9IEdsb2JhbFN0YXRlPGFyYzQuVWludE42ND4oeyBrZXk6ICdjdXJyZW50UmVxdWVzdElkJywgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5VaW50TjY0KDEpIH0pCiAgICBieXRlYyA2IC8vICJjdXJyZW50UmVxdWVzdElkIgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTU1CiAgICAvLyB0aGlzLmN1cnJlbnRSZXF1ZXN0SWQudmFsdWUgPSBuZXcgYXJjNC5VaW50TjY0KHJlcXVlc3RJZC5uYXRpdmUgKyAxKQogICAgc3dhcAogICAgYXBwX2dsb2JhbF9wdXQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjU4CiAgICAvLyB0b3RhbFBlbmRpbmdSZXF1ZXN0cyA9IEdsb2JhbFN0YXRlPGFyYzQuVWludE42ND4oeyBrZXk6ICd0b3RhbFBlbmRpbmdSZXF1ZXN0cycsIGluaXRpYWxWYWx1ZTogbmV3IGFyYzQuVWludE42NCgwKSB9KQogICAgaW50Y18xIC8vIDAKICAgIGJ5dGVjXzAgLy8gInRvdGFsUGVuZGluZ1JlcXVlc3RzIgogICAgYXBwX2dsb2JhbF9nZXRfZXgKICAgIGFzc2VydCAvLyBjaGVjayBHbG9iYWxTdGF0ZSBleGlzdHMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE1NwogICAgLy8gdGhpcy50b3RhbFBlbmRpbmdSZXF1ZXN0cy52YWx1ZSA9IG5ldyBhcmM0LlVpbnRONjQodGhpcy50b3RhbFBlbmRpbmdSZXF1ZXN0cy52YWx1ZS5uYXRpdmUgKyAxKQogICAgYnRvaQogICAgaW50Y18wIC8vIDEKICAgICsKICAgIGl0b2IKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjU4CiAgICAvLyB0b3RhbFBlbmRpbmdSZXF1ZXN0cyA9IEdsb2JhbFN0YXRlPGFyYzQuVWludE42ND4oeyBrZXk6ICd0b3RhbFBlbmRpbmdSZXF1ZXN0cycsIGluaXRpYWxWYWx1ZTogbmV3IGFyYzQuVWludE42NCgwKSB9KQogICAgYnl0ZWNfMCAvLyAidG90YWxQZW5kaW5nUmVxdWVzdHMiCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNTcKICAgIC8vIHRoaXMudG90YWxQZW5kaW5nUmVxdWVzdHMudmFsdWUgPSBuZXcgYXJjNC5VaW50TjY0KHRoaXMudG90YWxQZW5kaW5nUmVxdWVzdHMudmFsdWUubmF0aXZlICsgMSkKICAgIHN3YXAKICAgIGFwcF9nbG9iYWxfcHV0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNjEtMTY2CiAgICAvLyBuZXcgUmVxdWVzdENyZWF0ZWQoewogICAgLy8gICByZXF1ZXN0SWQ6IHJlcXVlc3RJZCwKICAgIC8vICAgcmVxdWVzdGVyQXBwSWQ6IG5ldyBhcmM0LlVpbnRONjQoY2FsbGVyQXBwSWQpLAogICAgLy8gICByZXF1ZXN0ZXJBZGRyZXNzOiByZXF1ZXN0ZXJBZGRyZXNzLAogICAgLy8gICByb3VuZDogcm91bmQsCiAgICAvLyB9KSwKICAgIGR1cAogICAgdW5jb3ZlciAyCiAgICBjb25jYXQKICAgIGZyYW1lX2RpZyAtMwogICAgY29uY2F0CiAgICBmcmFtZV9kaWcgLTIKICAgIGNvbmNhdAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTYwLTE2NwogICAgLy8gZW1pdCgKICAgIC8vICAgbmV3IFJlcXVlc3RDcmVhdGVkKHsKICAgIC8vICAgICByZXF1ZXN0SWQ6IHJlcXVlc3RJZCwKICAgIC8vICAgICByZXF1ZXN0ZXJBcHBJZDogbmV3IGFyYzQuVWludE42NChjYWxsZXJBcHBJZCksCiAgICAvLyAgICAgcmVxdWVzdGVyQWRkcmVzczogcmVxdWVzdGVyQWRkcmVzcywKICAgIC8vICAgICByb3VuZDogcm91bmQsCiAgICAvLyAgIH0pLAogICAgLy8gKQogICAgcHVzaGJ5dGVzIDB4ZDA2YjU2ZTYgLy8gbWV0aG9kICJSZXF1ZXN0Q3JlYXRlZCh1aW50NjQsdWludDY0LGFkZHJlc3MsdWludDY0KSIKICAgIHN3YXAKICAgIGNvbmNhdAogICAgbG9nCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNjkKICAgIC8vIHJldHVybiByZXF1ZXN0SWQKICAgIGZyYW1lX2J1cnkgMAogICAgcmV0c3ViCgpjcmVhdGVSZXF1ZXN0X2Jvb2xfZmFsc2VAMzoKICAgIGludGNfMSAvLyAwCiAgICBiIGNyZWF0ZVJlcXVlc3RfYm9vbF9tZXJnZUA0CgoKLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6OlJhbmRvbW5lc3NCZWFjb24uY2FuY2VsUmVxdWVzdChyZXF1ZXN0SWQ6IGJ5dGVzKSAtPiB2b2lkOgpjYW5jZWxSZXF1ZXN0OgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTcyCiAgICAvLyBwdWJsaWMgY2FuY2VsUmVxdWVzdChyZXF1ZXN0SWQ6IGFyYzQuVWludE42NCk6IHZvaWQgewogICAgcHJvdG8gMSAwCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo1NQogICAgLy8gcmVxdWVzdHMgPSBCb3hNYXA8YXJjNC5VaW50TjY0LCBSYW5kb21uZXNzUmVxdWVzdD4oeyBrZXlQcmVmaXg6ICdyZXF1ZXN0cycgfSkKICAgIGJ5dGVjIDUgLy8gInJlcXVlc3RzIgogICAgZnJhbWVfZGlnIC0xCiAgICBjb25jYXQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE3NAogICAgLy8gY29uc3QgcmVxdWVzdDogUmFuZG9tbmVzc1JlcXVlc3QgPSB0aGlzLnJlcXVlc3RzKHJlcXVlc3RJZCkudmFsdWUuY29weSgpCiAgICBib3hfZ2V0CiAgICBzd2FwCiAgICBkdXAKICAgIHVuY292ZXIgMgogICAgYXNzZXJ0IC8vIEJveCBtdXN0IGhhdmUgdmFsdWUKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE3NgogICAgLy8gYXNzZXJ0KEdsb2JhbC5yb3VuZCA+PSByZXF1ZXN0LnJvdW5kLm5hdGl2ZSArIE1BWF9QRU5ESU5HX1RJTUUsICdtdXN0IGJlIGFmdGVyIHRoZSBtYXggcGVuZGluZyB0aW1lJykKICAgIGdsb2JhbCBSb3VuZAogICAgZGlnIDEKICAgIHB1c2hpbnQgNDggLy8gNDgKICAgIGV4dHJhY3RfdWludDY0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vdHlwZXMuYWxnby50czoyMgogICAgLy8gZXhwb3J0IGNvbnN0IE1BWF9QRU5ESU5HX1RJTUU6IHVpbnQ2NCA9IDEwMCAvLyBzaG91bGQgYmUgMTAwMAogICAgcHVzaGludCAxMDAgLy8gMTAwCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNzYKICAgIC8vIGFzc2VydChHbG9iYWwucm91bmQgPj0gcmVxdWVzdC5yb3VuZC5uYXRpdmUgKyBNQVhfUEVORElOR19USU1FLCAnbXVzdCBiZSBhZnRlciB0aGUgbWF4IHBlbmRpbmcgdGltZScpCiAgICArCiAgICA+PQogICAgYXNzZXJ0IC8vIG11c3QgYmUgYWZ0ZXIgdGhlIG1heCBwZW5kaW5nIHRpbWUKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE3OAogICAgLy8gbGV0IGFtb3VudFRvUmVmdW5kOiB1aW50NjQgPSByZXF1ZXN0LmJveENvc3QubmF0aXZlICsgcmVxdWVzdC5mZWVQYWlkLm5hdGl2ZQogICAgZHVwCiAgICBwdXNoaW50IDY0IC8vIDY0CiAgICBleHRyYWN0X3VpbnQ2NAogICAgZGlnIDEKICAgIHB1c2hpbnQgNTYgLy8gNTYKICAgIGV4dHJhY3RfdWludDY0CiAgICArCiAgICBkdXAKICAgIHVuY292ZXIgMgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTgxCiAgICAvLyBpZiAocmVxdWVzdC5yZXF1ZXN0ZXJBZGRyZXNzLm5hdGl2ZSAhPT0gVHhuLnNlbmRlcikgewogICAgZXh0cmFjdCAxNiAzMiAvLyBvbiBlcnJvcjogSW5kZXggYWNjZXNzIGlzIG91dCBvZiBib3VuZHMKICAgIGR1cAogICAgY292ZXIgMgogICAgdHhuIFNlbmRlcgogICAgIT0KICAgIGJ6IGNhbmNlbFJlcXVlc3RfYWZ0ZXJfaWZfZWxzZUAzCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxODcKICAgIC8vIGNvbnN0IGNhbmNlbGxhdGlvbkZlZXM6IHVpbnQ2NCA9IEdsb2JhbC5taW5UeG5GZWUgKiAzCiAgICBnbG9iYWwgTWluVHhuRmVlCiAgICBwdXNoaW50IDMgLy8gMwogICAgKgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTkwCiAgICAvLyBhbW91bnRUb1JlZnVuZCAtPSBjYW5jZWxsYXRpb25GZWVzCiAgICBmcmFtZV9kaWcgMQogICAgZGlnIDEKICAgIC0KICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE5My0yMDAKICAgIC8vIGl0eG4KICAgIC8vICAgLnBheW1lbnQoewogICAgLy8gICAgIHJlY2VpdmVyOiBUeG4uc2VuZGVyLAogICAgLy8gICAgIGFtb3VudDogY2FuY2VsbGF0aW9uRmVlcywKICAgIC8vICAgICBub3RlOiBOT1RFX0NBTkNFTF9QQVlNRU5ULAogICAgLy8gICAgIGZlZTogMCwKICAgIC8vICAgfSkKICAgIC8vICAgLnN1Ym1pdCgpCiAgICBpdHhuX2JlZ2luCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxOTUKICAgIC8vIHJlY2VpdmVyOiBUeG4uc2VuZGVyLAogICAgdHhuIFNlbmRlcgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL3R5cGVzLmFsZ28udHM6MTYKICAgIC8vIGV4cG9ydCBjb25zdCBOT1RFX0NBTkNFTF9QQVlNRU5UID0gJ2NhbmNlbGxhdGlvbiBmZWVzIGZvciBjYWxsZXInCiAgICBwdXNoYnl0ZXMgImNhbmNlbGxhdGlvbiBmZWVzIGZvciBjYWxsZXIiCiAgICBpdHhuX2ZpZWxkIE5vdGUKICAgIHVuY292ZXIgMgogICAgaXR4bl9maWVsZCBBbW91bnQKICAgIGl0eG5fZmllbGQgUmVjZWl2ZXIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE5My0xOTkKICAgIC8vIGl0eG4KICAgIC8vICAgLnBheW1lbnQoewogICAgLy8gICAgIHJlY2VpdmVyOiBUeG4uc2VuZGVyLAogICAgLy8gICAgIGFtb3VudDogY2FuY2VsbGF0aW9uRmVlcywKICAgIC8vICAgICBub3RlOiBOT1RFX0NBTkNFTF9QQVlNRU5ULAogICAgLy8gICAgIGZlZTogMCwKICAgIC8vICAgfSkKICAgIGludGNfMCAvLyAxCiAgICBpdHhuX2ZpZWxkIFR5cGVFbnVtCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxOTgKICAgIC8vIGZlZTogMCwKICAgIGludGNfMSAvLyAwCiAgICBpdHhuX2ZpZWxkIEZlZQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTkzLTIwMAogICAgLy8gaXR4bgogICAgLy8gICAucGF5bWVudCh7CiAgICAvLyAgICAgcmVjZWl2ZXI6IFR4bi5zZW5kZXIsCiAgICAvLyAgICAgYW1vdW50OiBjYW5jZWxsYXRpb25GZWVzLAogICAgLy8gICAgIG5vdGU6IE5PVEVfQ0FOQ0VMX1BBWU1FTlQsCiAgICAvLyAgICAgZmVlOiAwLAogICAgLy8gICB9KQogICAgLy8gICAuc3VibWl0KCkKICAgIGl0eG5fc3VibWl0CiAgICBmcmFtZV9idXJ5IDMKCmNhbmNlbFJlcXVlc3RfYWZ0ZXJfaWZfZWxzZUAzOgogICAgZnJhbWVfZGlnIDMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjIwNC0yMTEKICAgIC8vIGl0eG4KICAgIC8vICAgLnBheW1lbnQoewogICAgLy8gICAgIHJlY2VpdmVyOiByZXF1ZXN0LnJlcXVlc3RlckFkZHJlc3MubmF0aXZlLAogICAgLy8gICAgIGFtb3VudDogYW1vdW50VG9SZWZ1bmQsCiAgICAvLyAgICAgbm90ZTogTk9URV9CT1hfTUJSX1JFRlVORCwgLy8gVE9ETzogbWFrZSBhIG5ldyBub3RlIHRoYXQgZXhwbGFpbnMgdGhpcyBiZXR0ZXIKICAgIC8vICAgICBmZWU6IDAsIC8vIGZvcmNlIGdyb3VwIHRvIGNvdmVyIGl0CiAgICAvLyAgIH0pCiAgICAvLyAgIC5zdWJtaXQoKQogICAgaXR4bl9iZWdpbgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL3R5cGVzLmFsZ28udHM6MTQKICAgIC8vIGV4cG9ydCBjb25zdCBOT1RFX0JPWF9NQlJfUkVGVU5EID0gJ2JveCBtYnIgcmVmdW5kJwogICAgYnl0ZWMgOCAvLyAiYm94IG1iciByZWZ1bmQiCiAgICBpdHhuX2ZpZWxkIE5vdGUKICAgIGl0eG5fZmllbGQgQW1vdW50CiAgICBmcmFtZV9kaWcgMgogICAgZHVwCiAgICBpdHhuX2ZpZWxkIFJlY2VpdmVyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyMDQtMjEwCiAgICAvLyBpdHhuCiAgICAvLyAgIC5wYXltZW50KHsKICAgIC8vICAgICByZWNlaXZlcjogcmVxdWVzdC5yZXF1ZXN0ZXJBZGRyZXNzLm5hdGl2ZSwKICAgIC8vICAgICBhbW91bnQ6IGFtb3VudFRvUmVmdW5kLAogICAgLy8gICAgIG5vdGU6IE5PVEVfQk9YX01CUl9SRUZVTkQsIC8vIFRPRE86IG1ha2UgYSBuZXcgbm90ZSB0aGF0IGV4cGxhaW5zIHRoaXMgYmV0dGVyCiAgICAvLyAgICAgZmVlOiAwLCAvLyBmb3JjZSBncm91cCB0byBjb3ZlciBpdAogICAgLy8gICB9KQogICAgaW50Y18wIC8vIDEKICAgIGl0eG5fZmllbGQgVHlwZUVudW0KICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjIwOQogICAgLy8gZmVlOiAwLCAvLyBmb3JjZSBncm91cCB0byBjb3ZlciBpdAogICAgaW50Y18xIC8vIDAKICAgIGl0eG5fZmllbGQgRmVlCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyMDQtMjExCiAgICAvLyBpdHhuCiAgICAvLyAgIC5wYXltZW50KHsKICAgIC8vICAgICByZWNlaXZlcjogcmVxdWVzdC5yZXF1ZXN0ZXJBZGRyZXNzLm5hdGl2ZSwKICAgIC8vICAgICBhbW91bnQ6IGFtb3VudFRvUmVmdW5kLAogICAgLy8gICAgIG5vdGU6IE5PVEVfQk9YX01CUl9SRUZVTkQsIC8vIFRPRE86IG1ha2UgYSBuZXcgbm90ZSB0aGF0IGV4cGxhaW5zIHRoaXMgYmV0dGVyCiAgICAvLyAgICAgZmVlOiAwLCAvLyBmb3JjZSBncm91cCB0byBjb3ZlciBpdAogICAgLy8gICB9KQogICAgLy8gICAuc3VibWl0KCkKICAgIGl0eG5fc3VibWl0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyMTcKICAgIC8vIHJlcXVlc3RlckFwcElkOiByZXF1ZXN0LnJlcXVlc3RlckFwcElkLAogICAgZnJhbWVfZGlnIDAKICAgIGV4dHJhY3QgOCA4IC8vIG9uIGVycm9yOiBJbmRleCBhY2Nlc3MgaXMgb3V0IG9mIGJvdW5kcwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjE1LTIxOQogICAgLy8gbmV3IFJlcXVlc3RDYW5jZWxsZWQoewogICAgLy8gICByZXF1ZXN0SWQ6IHJlcXVlc3RJZCwKICAgIC8vICAgcmVxdWVzdGVyQXBwSWQ6IHJlcXVlc3QucmVxdWVzdGVyQXBwSWQsCiAgICAvLyAgIHJlcXVlc3RlckFkZHJlc3M6IHJlcXVlc3QucmVxdWVzdGVyQWRkcmVzcywKICAgIC8vIH0pLAogICAgZnJhbWVfZGlnIC0xCiAgICBzd2FwCiAgICBjb25jYXQKICAgIHN3YXAKICAgIGNvbmNhdAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjE0LTIyMAogICAgLy8gZW1pdCgKICAgIC8vICAgbmV3IFJlcXVlc3RDYW5jZWxsZWQoewogICAgLy8gICAgIHJlcXVlc3RJZDogcmVxdWVzdElkLAogICAgLy8gICAgIHJlcXVlc3RlckFwcElkOiByZXF1ZXN0LnJlcXVlc3RlckFwcElkLAogICAgLy8gICAgIHJlcXVlc3RlckFkZHJlc3M6IHJlcXVlc3QucmVxdWVzdGVyQWRkcmVzcywKICAgIC8vICAgfSksCiAgICAvLyApCiAgICBwdXNoYnl0ZXMgMHhjNTFjZjY3ZCAvLyBtZXRob2QgIlJlcXVlc3RDYW5jZWxsZWQodWludDY0LHVpbnQ2NCxhZGRyZXNzKSIKICAgIHN3YXAKICAgIGNvbmNhdAogICAgbG9nCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyMjIKICAgIC8vIHRoaXMuZGVsZXRlUmVxdWVzdChyZXF1ZXN0SWQpCiAgICBmcmFtZV9kaWcgLTEKICAgIGNhbGxzdWIgZGVsZXRlUmVxdWVzdAogICAgcmV0c3ViCgoKLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6OlJhbmRvbW5lc3NCZWFjb24uY29tcGxldGVSZXF1ZXN0KHJlcXVlc3RJZDogYnl0ZXMsIHByb29mOiBieXRlcykgLT4gdm9pZDoKY29tcGxldGVSZXF1ZXN0OgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjMwCiAgICAvLyBwdWJsaWMgY29tcGxldGVSZXF1ZXN0KHJlcXVlc3RJZDogYXJjNC5VaW50TjY0LCBwcm9vZjogYXJjNC5TdGF0aWNCeXRlczw4MD4pOiB2b2lkIHsKICAgIHByb3RvIDIgMAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjMyCiAgICAvLyB0aGlzLm9ubHlNYW5hZ2VyKCkKICAgIGNhbGxzdWIgb25seU1hbmFnZXIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjU1CiAgICAvLyByZXF1ZXN0cyA9IEJveE1hcDxhcmM0LlVpbnRONjQsIFJhbmRvbW5lc3NSZXF1ZXN0Pih7IGtleVByZWZpeDogJ3JlcXVlc3RzJyB9KQogICAgYnl0ZWMgNSAvLyAicmVxdWVzdHMiCiAgICBmcmFtZV9kaWcgLTIKICAgIGNvbmNhdAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjM0CiAgICAvLyBjb25zdCByZXF1ZXN0OiBSYW5kb21uZXNzUmVxdWVzdCA9IHRoaXMucmVxdWVzdHMocmVxdWVzdElkKS52YWx1ZS5jb3B5KCkKICAgIGJveF9nZXQKICAgIHN3YXAKICAgIGR1cAogICAgdW5jb3ZlciAyCiAgICBhc3NlcnQgLy8gQm94IG11c3QgaGF2ZSB2YWx1ZQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjM2CiAgICAvLyBjb25zdCBibG9ja1NlZWQgPSBvcC5CbG9jay5ibGtTZWVkKHJlcXVlc3Qucm91bmQubmF0aXZlKQogICAgcHVzaGludCA0OCAvLyA0OAogICAgZXh0cmFjdF91aW50NjQKICAgIGJsb2NrIEJsa1NlZWQKCmNvbXBsZXRlUmVxdWVzdF93aGlsZV90b3BANToKICAgIHB1c2hpbnQgNTcxMCAvLyA1NzEwCiAgICBnbG9iYWwgT3Bjb2RlQnVkZ2V0CiAgICA+CiAgICBieiBjb21wbGV0ZVJlcXVlc3RfYWZ0ZXJfd2hpbGVAMTAKICAgIGl0eG5fYmVnaW4KICAgIHB1c2hpbnQgNiAvLyBhcHBsCiAgICBpdHhuX2ZpZWxkIFR5cGVFbnVtCiAgICBpbnRjXzIgLy8gRGVsZXRlQXBwbGljYXRpb24KICAgIGl0eG5fZmllbGQgT25Db21wbGV0aW9uCiAgICBieXRlYyA5IC8vIDB4MDY4MTAxCiAgICBpdHhuX2ZpZWxkIEFwcHJvdmFsUHJvZ3JhbQogICAgYnl0ZWMgOSAvLyAweDA2ODEwMQogICAgaXR4bl9maWVsZCBDbGVhclN0YXRlUHJvZ3JhbQogICAgaW50Y18xIC8vIDAKICAgIGl0eG5fZmllbGQgRmVlCiAgICBpdHhuX3N1Ym1pdAogICAgYiBjb21wbGV0ZVJlcXVlc3Rfd2hpbGVfdG9wQDUKCmNvbXBsZXRlUmVxdWVzdF9hZnRlcl93aGlsZUAxMDoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjQ5CiAgICAvLyBwdWJsaWNLZXkgPSBHbG9iYWxTdGF0ZTxhcmM0LlN0YXRpY0J5dGVzPDMyPj4oeyBrZXk6ICdwdWJsaWNLZXknIH0pCiAgICBpbnRjXzEgLy8gMAogICAgYnl0ZWMgNyAvLyAicHVibGljS2V5IgogICAgYXBwX2dsb2JhbF9nZXRfZXgKICAgIGFzc2VydCAvLyBjaGVjayBHbG9iYWxTdGF0ZSBleGlzdHMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI0MAogICAgLy8gY29uc3QgW291dHB1dCwgdmVyaWZpZWRdID0gb3AudnJmVmVyaWZ5KFZyZlZlcmlmeS5WcmZBbGdvcmFuZCwgYmxvY2tTZWVkLCBwcm9vZi5ieXRlcywgdGhpcy5wdWJsaWNLZXkudmFsdWUuYnl0ZXMpCiAgICBmcmFtZV9kaWcgMQogICAgZnJhbWVfZGlnIC0xCiAgICB1bmNvdmVyIDIKICAgIHZyZl92ZXJpZnkgVnJmQWxnb3JhbmQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI0MgogICAgLy8gYXNzZXJ0KHZlcmlmaWVkLCBFUlJfUFJPT0ZfTVVTVF9CRV9WQUxJRCkKICAgIGFzc2VydCAvLyBwcm9vZiBtdXN0IGJlIHZhbGlkCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyNDUtMjQ5CiAgICAvLyBjb25zdCByID0gYXJjNC5hYmlDYWxsKFJhbmRvbW5lc3NCZWFjb25DYWxsZXJTdHViLnByb3RvdHlwZS5mdWxmaWxsUmFuZG9tbmVzcywgewogICAgLy8gICBhcHBJZDogcmVxdWVzdC5yZXF1ZXN0ZXJBcHBJZC5uYXRpdmUsCiAgICAvLyAgIGFyZ3M6IFtyZXF1ZXN0SWQsIHJlcXVlc3QucmVxdWVzdGVyQWRkcmVzcywgbmV3IGFyYzQuU3RhdGljQnl0ZXM8NjQ+KG91dHB1dCldLAogICAgLy8gICBmZWU6IDAsCiAgICAvLyB9KQogICAgaXR4bl9iZWdpbgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjQ2CiAgICAvLyBhcHBJZDogcmVxdWVzdC5yZXF1ZXN0ZXJBcHBJZC5uYXRpdmUsCiAgICBmcmFtZV9kaWcgMAogICAgZHVwCiAgICBleHRyYWN0IDggOCAvLyBvbiBlcnJvcjogSW5kZXggYWNjZXNzIGlzIG91dCBvZiBib3VuZHMKICAgIGRpZyAxCiAgICBpbnRjXzMgLy8gOAogICAgZXh0cmFjdF91aW50NjQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI0NwogICAgLy8gYXJnczogW3JlcXVlc3RJZCwgcmVxdWVzdC5yZXF1ZXN0ZXJBZGRyZXNzLCBuZXcgYXJjNC5TdGF0aWNCeXRlczw2ND4ob3V0cHV0KV0sCiAgICBkaWcgMgogICAgZXh0cmFjdCAxNiAzMiAvLyBvbiBlcnJvcjogSW5kZXggYWNjZXNzIGlzIG91dCBvZiBib3VuZHMKICAgIGRpZyA0CiAgICBsZW4KICAgIHB1c2hpbnQgNjQgLy8gNjQKICAgID09CiAgICBhc3NlcnQgLy8gaW52YWxpZCBzaXplCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyNDUtMjQ5CiAgICAvLyBjb25zdCByID0gYXJjNC5hYmlDYWxsKFJhbmRvbW5lc3NCZWFjb25DYWxsZXJTdHViLnByb3RvdHlwZS5mdWxmaWxsUmFuZG9tbmVzcywgewogICAgLy8gICBhcHBJZDogcmVxdWVzdC5yZXF1ZXN0ZXJBcHBJZC5uYXRpdmUsCiAgICAvLyAgIGFyZ3M6IFtyZXF1ZXN0SWQsIHJlcXVlc3QucmVxdWVzdGVyQWRkcmVzcywgbmV3IGFyYzQuU3RhdGljQnl0ZXM8NjQ+KG91dHB1dCldLAogICAgLy8gICBmZWU6IDAsCiAgICAvLyB9KQogICAgcHVzaGJ5dGVzIDB4NDJjYmZlNGMgLy8gbWV0aG9kICJmdWxmaWxsUmFuZG9tbmVzcyh1aW50NjQsYWRkcmVzcyxieXRlWzY0XSl2b2lkIgogICAgaXR4bl9maWVsZCBBcHBsaWNhdGlvbkFyZ3MKICAgIGZyYW1lX2RpZyAtMgogICAgaXR4bl9maWVsZCBBcHBsaWNhdGlvbkFyZ3MKICAgIGR1cAogICAgaXR4bl9maWVsZCBBcHBsaWNhdGlvbkFyZ3MKICAgIHVuY292ZXIgNAogICAgaXR4bl9maWVsZCBBcHBsaWNhdGlvbkFyZ3MKICAgIHN3YXAKICAgIGl0eG5fZmllbGQgQXBwbGljYXRpb25JRAogICAgcHVzaGludCA2IC8vIGFwcGwKICAgIGl0eG5fZmllbGQgVHlwZUVudW0KICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI0OAogICAgLy8gZmVlOiAwLAogICAgaW50Y18xIC8vIDAKICAgIGl0eG5fZmllbGQgRmVlCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyNDUtMjQ5CiAgICAvLyBjb25zdCByID0gYXJjNC5hYmlDYWxsKFJhbmRvbW5lc3NCZWFjb25DYWxsZXJTdHViLnByb3RvdHlwZS5mdWxmaWxsUmFuZG9tbmVzcywgewogICAgLy8gICBhcHBJZDogcmVxdWVzdC5yZXF1ZXN0ZXJBcHBJZC5uYXRpdmUsCiAgICAvLyAgIGFyZ3M6IFtyZXF1ZXN0SWQsIHJlcXVlc3QucmVxdWVzdGVyQWRkcmVzcywgbmV3IGFyYzQuU3RhdGljQnl0ZXM8NjQ+KG91dHB1dCldLAogICAgLy8gICBmZWU6IDAsCiAgICAvLyB9KQogICAgaXR4bl9zdWJtaXQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI1Mi0yNTkKICAgIC8vIGl0eG4KICAgIC8vICAgLnBheW1lbnQoewogICAgLy8gICAgIHJlY2VpdmVyOiBUeG4uc2VuZGVyLAogICAgLy8gICAgIGFtb3VudDogcmVxdWVzdC5mZWVQYWlkLm5hdGl2ZSwKICAgIC8vICAgICBub3RlOiBOT1RFX0ZFRVNfUEFZTUVOVCwKICAgIC8vICAgICBmZWU6IDAsCiAgICAvLyAgIH0pCiAgICAvLyAgIC5zdWJtaXQoKQogICAgaXR4bl9iZWdpbgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjU0CiAgICAvLyByZWNlaXZlcjogVHhuLnNlbmRlciwKICAgIHR4biBTZW5kZXIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI1NQogICAgLy8gYW1vdW50OiByZXF1ZXN0LmZlZVBhaWQubmF0aXZlLAogICAgZGlnIDMKICAgIHB1c2hpbnQgNTYgLy8gNTYKICAgIGV4dHJhY3RfdWludDY0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vdHlwZXMuYWxnby50czoxNQogICAgLy8gZXhwb3J0IGNvbnN0IE5PVEVfRkVFU19QQVlNRU5UID0gJ2ZlZXMgcGF5bWVudCBmb3IgY2FsbGVyJwogICAgcHVzaGJ5dGVzICJmZWVzIHBheW1lbnQgZm9yIGNhbGxlciIKICAgIGl0eG5fZmllbGQgTm90ZQogICAgaXR4bl9maWVsZCBBbW91bnQKICAgIGl0eG5fZmllbGQgUmVjZWl2ZXIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI1Mi0yNTgKICAgIC8vIGl0eG4KICAgIC8vICAgLnBheW1lbnQoewogICAgLy8gICAgIHJlY2VpdmVyOiBUeG4uc2VuZGVyLAogICAgLy8gICAgIGFtb3VudDogcmVxdWVzdC5mZWVQYWlkLm5hdGl2ZSwKICAgIC8vICAgICBub3RlOiBOT1RFX0ZFRVNfUEFZTUVOVCwKICAgIC8vICAgICBmZWU6IDAsCiAgICAvLyAgIH0pCiAgICBpbnRjXzAgLy8gMQogICAgaXR4bl9maWVsZCBUeXBlRW51bQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjU3CiAgICAvLyBmZWU6IDAsCiAgICBpbnRjXzEgLy8gMAogICAgaXR4bl9maWVsZCBGZWUKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI1Mi0yNTkKICAgIC8vIGl0eG4KICAgIC8vICAgLnBheW1lbnQoewogICAgLy8gICAgIHJlY2VpdmVyOiBUeG4uc2VuZGVyLAogICAgLy8gICAgIGFtb3VudDogcmVxdWVzdC5mZWVQYWlkLm5hdGl2ZSwKICAgIC8vICAgICBub3RlOiBOT1RFX0ZFRVNfUEFZTUVOVCwKICAgIC8vICAgICBmZWU6IDAsCiAgICAvLyAgIH0pCiAgICAvLyAgIC5zdWJtaXQoKQogICAgaXR4bl9zdWJtaXQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI2Mi0yNjkKICAgIC8vIGl0eG4KICAgIC8vICAgLnBheW1lbnQoewogICAgLy8gICAgIHJlY2VpdmVyOiByZXF1ZXN0LnJlcXVlc3RlckFkZHJlc3MubmF0aXZlLAogICAgLy8gICAgIGFtb3VudDogcmVxdWVzdC5ib3hDb3N0Lm5hdGl2ZSwKICAgIC8vICAgICBub3RlOiBOT1RFX0JPWF9NQlJfUkVGVU5ELAogICAgLy8gICAgIGZlZTogMCwKICAgIC8vICAgfSkKICAgIC8vICAgLnN1Ym1pdCgpCiAgICBpdHhuX2JlZ2luCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyNjUKICAgIC8vIGFtb3VudDogcmVxdWVzdC5ib3hDb3N0Lm5hdGl2ZSwKICAgIHVuY292ZXIgMgogICAgcHVzaGludCA2NCAvLyA2NAogICAgZXh0cmFjdF91aW50NjQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi90eXBlcy5hbGdvLnRzOjE0CiAgICAvLyBleHBvcnQgY29uc3QgTk9URV9CT1hfTUJSX1JFRlVORCA9ICdib3ggbWJyIHJlZnVuZCcKICAgIGJ5dGVjIDggLy8gImJveCBtYnIgcmVmdW5kIgogICAgaXR4bl9maWVsZCBOb3RlCiAgICBpdHhuX2ZpZWxkIEFtb3VudAogICAgZHVwCiAgICBpdHhuX2ZpZWxkIFJlY2VpdmVyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyNjItMjY4CiAgICAvLyBpdHhuCiAgICAvLyAgIC5wYXltZW50KHsKICAgIC8vICAgICByZWNlaXZlcjogcmVxdWVzdC5yZXF1ZXN0ZXJBZGRyZXNzLm5hdGl2ZSwKICAgIC8vICAgICBhbW91bnQ6IHJlcXVlc3QuYm94Q29zdC5uYXRpdmUsCiAgICAvLyAgICAgbm90ZTogTk9URV9CT1hfTUJSX1JFRlVORCwKICAgIC8vICAgICBmZWU6IDAsCiAgICAvLyAgIH0pCiAgICBpbnRjXzAgLy8gMQogICAgaXR4bl9maWVsZCBUeXBlRW51bQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjY3CiAgICAvLyBmZWU6IDAsCiAgICBpbnRjXzEgLy8gMAogICAgaXR4bl9maWVsZCBGZWUKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI2Mi0yNjkKICAgIC8vIGl0eG4KICAgIC8vICAgLnBheW1lbnQoewogICAgLy8gICAgIHJlY2VpdmVyOiByZXF1ZXN0LnJlcXVlc3RlckFkZHJlc3MubmF0aXZlLAogICAgLy8gICAgIGFtb3VudDogcmVxdWVzdC5ib3hDb3N0Lm5hdGl2ZSwKICAgIC8vICAgICBub3RlOiBOT1RFX0JPWF9NQlJfUkVGVU5ELAogICAgLy8gICAgIGZlZTogMCwKICAgIC8vICAgfSkKICAgIC8vICAgLnN1Ym1pdCgpCiAgICBpdHhuX3N1Ym1pdAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjczLTI3NwogICAgLy8gbmV3IFJlcXVlc3RGdWxmaWxsZWQoewogICAgLy8gICByZXF1ZXN0SWQ6IHJlcXVlc3RJZCwKICAgIC8vICAgcmVxdWVzdGVyQXBwSWQ6IHJlcXVlc3QucmVxdWVzdGVyQXBwSWQsCiAgICAvLyAgIHJlcXVlc3RlckFkZHJlc3M6IHJlcXVlc3QucmVxdWVzdGVyQWRkcmVzcywKICAgIC8vIH0pLAogICAgZnJhbWVfZGlnIC0yCiAgICB1bmNvdmVyIDIKICAgIGNvbmNhdAogICAgc3dhcAogICAgY29uY2F0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyNzItMjc4CiAgICAvLyBlbWl0KAogICAgLy8gICBuZXcgUmVxdWVzdEZ1bGZpbGxlZCh7CiAgICAvLyAgICAgcmVxdWVzdElkOiByZXF1ZXN0SWQsCiAgICAvLyAgICAgcmVxdWVzdGVyQXBwSWQ6IHJlcXVlc3QucmVxdWVzdGVyQXBwSWQsCiAgICAvLyAgICAgcmVxdWVzdGVyQWRkcmVzczogcmVxdWVzdC5yZXF1ZXN0ZXJBZGRyZXNzLAogICAgLy8gICB9KSwKICAgIC8vICkKICAgIHB1c2hieXRlcyAweDZjY2MxY2JlIC8vIG1ldGhvZCAiUmVxdWVzdEZ1bGZpbGxlZCh1aW50NjQsdWludDY0LGFkZHJlc3MpIgogICAgc3dhcAogICAgY29uY2F0CiAgICBsb2cKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI4MQogICAgLy8gdGhpcy5kZWxldGVSZXF1ZXN0KHJlcXVlc3RJZCkKICAgIGZyYW1lX2RpZyAtMgogICAgY2FsbHN1YiBkZWxldGVSZXF1ZXN0CiAgICByZXRzdWIKCgovLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo6UmFuZG9tbmVzc0JlYWNvbi5nZXRDb3N0cygpIC0+IGJ5dGVzOgpnZXRDb3N0czoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI5OQogICAgLy8gY29uc3QgdHhuRmVlczogdWludDY0ID0gR2xvYmFsLm1pblR4bkZlZSAqIG51bVJlcXVpcmVkVHhucwogICAgZ2xvYmFsIE1pblR4bkZlZQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6Mjk3CiAgICAvLyBjb25zdCBudW1SZXF1aXJlZFR4bnM6IHVpbnQ2NCA9IDggKyAyICsgMSArIDEKICAgIHB1c2hpbnQgMTIgLy8gMTIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI5OQogICAgLy8gY29uc3QgdHhuRmVlczogdWludDY0ID0gR2xvYmFsLm1pblR4bkZlZSAqIG51bVJlcXVpcmVkVHhucwogICAgKgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MzE2CiAgICAvLyByZXR1cm4gbmV3IGFyYzQuVHVwbGUobmV3IGFyYzQuVWludE42NCh0eG5GZWVzKSwgbmV3IGFyYzQuVWludE42NChib3hDb3N0KSkKICAgIGl0b2IKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjMxNAogICAgLy8gY29uc3QgYm94Q29zdDogdWludDY0ID0gQk9YX0NSRUFURV9DT1NUICsgQk9YX0JZVEVfQ09TVCAqIChrZXlTaXplICsgYm94U2l6ZSkKICAgIHB1c2hpbnQgMzc3MDAgLy8gMzc3MDAKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjMxNgogICAgLy8gcmV0dXJuIG5ldyBhcmM0LlR1cGxlKG5ldyBhcmM0LlVpbnRONjQodHhuRmVlcyksIG5ldyBhcmM0LlVpbnRONjQoYm94Q29zdCkpCiAgICBpdG9iCiAgICBjb25jYXQKICAgIHJldHN1YgoKCi8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6Ok1hbmFnYWJsZS5vbmx5TWFuYWdlcigpIC0+IHZvaWQ6Cm9ubHlNYW5hZ2VyOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czoxNQogICAgLy8ga2V5OiAnbWFuYWdlcicsCiAgICBpbnRjXzEgLy8gMAogICAgYnl0ZWNfMSAvLyAibWFuYWdlciIKICAgIGFwcF9nbG9iYWxfZ2V0X2V4CiAgICBhc3NlcnQgLy8gY2hlY2sgR2xvYmFsU3RhdGUgZXhpc3RzCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL21hbmFnYWJsZS5hbGdvLnRzOjI0CiAgICAvLyBhc3NlcnQodGhpcy5fbWFuYWdlci52YWx1ZS5uYXRpdmUgPT09IFR4bi5zZW5kZXIsIEVSUl9PTkxZX01BTkFHRVIpCiAgICB0eG4gU2VuZGVyCiAgICA9PQogICAgYXNzZXJ0IC8vIG9ubHkgbWFuYWdlciBjYW4gcGVyZm9ybSB0aGlzIGFjdGlvbgogICAgcmV0c3ViCgoKLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czo6TWFuYWdhYmxlLnVwZGF0ZU1hbmFnZXIobmV3TWFuYWdlcjogYnl0ZXMpIC0+IHZvaWQ6CnVwZGF0ZU1hbmFnZXI6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL21hbmFnYWJsZS5hbGdvLnRzOjMxCiAgICAvLyBwdWJsaWMgdXBkYXRlTWFuYWdlcihuZXdNYW5hZ2VyOiBhcmM0LkFkZHJlc3MpOiB2b2lkIHsKICAgIHByb3RvIDEgMAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czozMwogICAgLy8gdGhpcy5vbmx5TWFuYWdlcigpCiAgICBjYWxsc3ViIG9ubHlNYW5hZ2VyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL21hbmFnYWJsZS5hbGdvLnRzOjM1CiAgICAvLyBhc3NlcnQobmV3TWFuYWdlci5uYXRpdmUgIT09IEdsb2JhbC56ZXJvQWRkcmVzcywgRVJSX1pFUk9fQUREUkVTUykKICAgIGZyYW1lX2RpZyAtMQogICAgZ2xvYmFsIFplcm9BZGRyZXNzCiAgICAhPQogICAgYXNzZXJ0IC8vIG1hbmFnZXIgY2Fubm90IGJlIHplcm8gYWRkcmVzcwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czoxNQogICAgLy8ga2V5OiAnbWFuYWdlcicsCiAgICBieXRlY18xIC8vICJtYW5hZ2VyIgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czozNwogICAgLy8gdGhpcy5fbWFuYWdlci52YWx1ZSA9IG5ld01hbmFnZXIKICAgIGZyYW1lX2RpZyAtMQogICAgYXBwX2dsb2JhbF9wdXQKICAgIHJldHN1YgoKCi8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6Ok1hbmFnYWJsZS5kZWxldGVNYW5hZ2VyKCkgLT4gdm9pZDoKZGVsZXRlTWFuYWdlcjoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6NDYKICAgIC8vIHRoaXMub25seU1hbmFnZXIoKQogICAgY2FsbHN1YiBvbmx5TWFuYWdlcgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czoxNQogICAgLy8ga2V5OiAnbWFuYWdlcicsCiAgICBieXRlY18xIC8vICJtYW5hZ2VyIgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czo0OAogICAgLy8gdGhpcy5fbWFuYWdlci52YWx1ZSA9IG5ldyBhcmM0LkFkZHJlc3MoR2xvYmFsLnplcm9BZGRyZXNzKQogICAgZ2xvYmFsIFplcm9BZGRyZXNzCiAgICBhcHBfZ2xvYmFsX3B1dAogICAgcmV0c3ViCgoKLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czo6TWFuYWdhYmxlLm1hbmFnZXIoKSAtPiBieXRlczoKbWFuYWdlcjoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6MTUKICAgIC8vIGtleTogJ21hbmFnZXInLAogICAgaW50Y18xIC8vIDAKICAgIGJ5dGVjXzEgLy8gIm1hbmFnZXIiCiAgICBhcHBfZ2xvYmFsX2dldF9leAogICAgYXNzZXJ0IC8vIGNoZWNrIEdsb2JhbFN0YXRlIGV4aXN0cwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czo1NwogICAgLy8gcmV0dXJuIHRoaXMuX21hbmFnZXIudmFsdWUKICAgIHJldHN1YgoKCi8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czo6UGF1c2FibGUub25seVBhdXNlcigpIC0+IHZvaWQ6Cm9ubHlQYXVzZXI6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6OAogICAgLy8ga2V5OiAncGF1c2VyJywKICAgIGludGNfMSAvLyAwCiAgICBieXRlY18yIC8vICJwYXVzZXIiCiAgICBhcHBfZ2xvYmFsX2dldF9leAogICAgYXNzZXJ0IC8vIGNoZWNrIEdsb2JhbFN0YXRlIGV4aXN0cwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjIwCiAgICAvLyBhc3NlcnQodGhpcy5fcGF1c2VyLnZhbHVlLm5hdGl2ZSA9PT0gVHhuLnNlbmRlciwgRVJSX09OTFlfUEFVU0VSKQogICAgdHhuIFNlbmRlcgogICAgPT0KICAgIGFzc2VydCAvLyBvbmx5IHBhdXNlciBjYW4gY2FsbCB0aGlzIG1ldGhvZAogICAgcmV0c3ViCgoKLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjpQYXVzYWJsZS5wYXVzZSgpIC0+IHZvaWQ6CnBhdXNlOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjI0CiAgICAvLyB0aGlzLm9ubHlQYXVzZXIoKQogICAgY2FsbHN1YiBvbmx5UGF1c2VyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6MTMKICAgIC8vIHBhdXNlZCA9IEdsb2JhbFN0YXRlPGFyYzQuQm9vbD4oeyBrZXk6ICdwYXVzZWQnLCBpbml0aWFsVmFsdWU6IG5ldyBhcmM0LkJvb2woZmFsc2UpIH0pCiAgICBieXRlY18zIC8vICJwYXVzZWQiCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6MjYKICAgIC8vIHRoaXMucGF1c2VkLnZhbHVlID0gbmV3IGFyYzQuQm9vbCh0cnVlKQogICAgcHVzaGJ5dGVzIDB4ODAKICAgIGFwcF9nbG9iYWxfcHV0CiAgICByZXRzdWIKCgovLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6OlBhdXNhYmxlLnVucGF1c2UoKSAtPiB2b2lkOgp1bnBhdXNlOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjMyCiAgICAvLyB0aGlzLm9ubHlQYXVzZXIoKQogICAgY2FsbHN1YiBvbmx5UGF1c2VyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6MTMKICAgIC8vIHBhdXNlZCA9IEdsb2JhbFN0YXRlPGFyYzQuQm9vbD4oeyBrZXk6ICdwYXVzZWQnLCBpbml0aWFsVmFsdWU6IG5ldyBhcmM0LkJvb2woZmFsc2UpIH0pCiAgICBieXRlY18zIC8vICJwYXVzZWQiCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6MzQKICAgIC8vIHRoaXMucGF1c2VkLnZhbHVlID0gbmV3IGFyYzQuQm9vbChmYWxzZSkKICAgIHB1c2hieXRlcyAweDAwCiAgICBhcHBfZ2xvYmFsX3B1dAogICAgcmV0c3ViCgoKLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjpQYXVzYWJsZS51cGRhdGVQYXVzZXIoX25ld1BhdXNlcjogYnl0ZXMpIC0+IHZvaWQ6CnVwZGF0ZVBhdXNlcjoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czozNwogICAgLy8gdXBkYXRlUGF1c2VyKF9uZXdQYXVzZXI6IGFyYzQuQWRkcmVzcyk6IHZvaWQgewogICAgcHJvdG8gMSAwCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6MzgKICAgIC8vIHRoaXMub25seVBhdXNlcigpCiAgICBjYWxsc3ViIG9ubHlQYXVzZXIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czo0MAogICAgLy8gYXNzZXJ0KF9uZXdQYXVzZXIubmF0aXZlICE9PSBHbG9iYWwuemVyb0FkZHJlc3MsIEVSUl9aRVJPX0FERFJFU1MpCiAgICBmcmFtZV9kaWcgLTEKICAgIGdsb2JhbCBaZXJvQWRkcmVzcwogICAgIT0KICAgIGFzc2VydCAvLyBwYXVzZXIgY2Fubm90IGJlIHplcm8gYWRkcmVzcwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjgKICAgIC8vIGtleTogJ3BhdXNlcicsCiAgICBieXRlY18yIC8vICJwYXVzZXIiCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6NDEKICAgIC8vIHRoaXMuX3BhdXNlci52YWx1ZSA9IF9uZXdQYXVzZXIKICAgIGZyYW1lX2RpZyAtMQogICAgYXBwX2dsb2JhbF9wdXQKICAgIHJldHN1YgoKCi8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czo6UGF1c2FibGUucGF1c2VyKCkgLT4gYnl0ZXM6CnBhdXNlcjoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czo4CiAgICAvLyBrZXk6ICdwYXVzZXInLAogICAgaW50Y18xIC8vIDAKICAgIGJ5dGVjXzIgLy8gInBhdXNlciIKICAgIGFwcF9nbG9iYWxfZ2V0X2V4CiAgICBhc3NlcnQgLy8gY2hlY2sgR2xvYmFsU3RhdGUgZXhpc3RzCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6NTIKICAgIC8vIHJldHVybiB0aGlzLl9wYXVzZXIudmFsdWUKICAgIHJldHN1Ygo=',
-    clear:
-      'I3ByYWdtYSB2ZXJzaW9uIDExCiNwcmFnbWEgdHlwZXRyYWNrIGZhbHNlCgovLyBAYWxnb3JhbmRmb3VuZGF0aW9uL2FsZ29yYW5kLXR5cGVzY3JpcHQvYmFzZS1jb250cmFjdC5kLnRzOjpCYXNlQ29udHJhY3QuY2xlYXJTdGF0ZVByb2dyYW0oKSAtPiB1aW50NjQ6Cm1haW46CiAgICBwdXNoaW50IDEgLy8gMQogICAgcmV0dXJuCg==',
-  },
-  byteCode: {
-    approval:
-      'CyAEAQAFCCYKFHRvdGFsUGVuZGluZ1JlcXVlc3RzB21hbmFnZXIGcGF1c2VyBnBhdXNlZAQVH3x1CHJlcXVlc3RzEGN1cnJlbnRSZXF1ZXN0SWQJcHVibGljS2V5DmJveCBtYnIgcmVmdW5kAwaBATEYQAAmKTIJZyoyCWcrgAEAZycGgAgAAAAAAAAAAWcogAgAAAAAAAAAAGcxG0EAaYIOBO/L08sERvdlMwQkh8MsBNiY7rcE8SxingQhtpxZBGwZYVoEiWAWjgTUjUJsBGdDQDEEAXj5SwQbUp3oBAyt0WMEsNlTszYaAI4OANQAxgC5AJgAiQB3AGYAVwBLADoALgAiABMAAiNDMRkURDEYRIgDpScETFCwIkMxGRREMRhENhoBiAOAIkMxGRREMRhEiANrIkMxGRREMRhEiANWIkMxGRREMRhEiAM8JwRMULAiQzEZFEQxGESIAyMiQzEZFEQxGEQ2GgGIAwMiQzEZFEQxGESIAuEnBExQsCJDMRkURDEYRDYaATYaAogB9yJDMRkURDEYRDYaAYgBSiJDMRkURDEYRDYaATYaAjEWIglJOBAiEkSIAI8nBExQsCJDMRkkEkQxGESIAEMiQzEZgQQSRDEYRIgAMSJDMRkURDEYFEQ2GgGIABgiQ4oBACMoZUQXIgkWKExnJwWL/1C8SImKAQAnB4v/Z4mIAliJiAJUIyhlRBcURLGIAmuAHmNsb3NlIG91dCByZW1haW5kZXIgdG8gbWFuYWdlcrIFsgkishAjsgGziYoDASMrZUQjUxREIyhlRBckDESL/hcyBg1EMg1JRIgB70lXCAiL/zgHMgoSQQBsi/84CIsBSSNbTCVbCA9BAFsiRIv/OAiLASVbCTIGFosAFk8CFk8CSwJQi/1Qi/5QTFCLAlAjJwZlRCcFSwFQTwK/SRciCBYnBkxnIyhlRBciCBYoTGdJTwJQi/1Qi/5QgATQa1bmTFCwjACJI0L/oooBACcFi/9QvkxJTwJEMgZLAYEwW4FkCA9ESYFAW0sBgThbCElPAlcQIElOAjEAE0EAPDIAgQMLiwFLAQmxMQCAHGNhbmNlbGxhdGlvbiBmZWVzIGZvciBjYWxsZXKyBU8CsgiyByKyECOyAbOMA4sDsScIsgWyCIsCSbIHIrIQI7IBs4sAVwgIi/9MUExQgATFHPZ9TFCwi/+I/meJigIAiADaJwWL/lC+TElPAkSBMFvRAIHOLDIMDUEAF7GBBrIQJLIZJwmyHicJsh8jsgGzQv/gIycHZUSLAYv/TwLQAESxiwBJVwgISwElW0sCVxAgSwQVgUASRIAEQsv+TLIai/6yGkmyGk8EshpMshiBBrIQI7IBs7ExAEsDgThbgBdmZWVzIHBheW1lbnQgZm9yIGNhbGxlcrIFsgiyByKyECOyAbOxTwKBQFsnCLIFsghJsgcishAjsgGzi/5PAlBMUIAEbMwcvkxQsIv+iP2UiTIAgQwLFoHEpgIWUIkjKWVEMQASRImKAQCI//GL/zIDE0Qpi/9niYj/4ykyA2eJIyllRIkjKmVEMQASRImI//QrgAGAZ4mI/+srgAEAZ4mKAQCI/9+L/zIDE0Qqi/9niSMqZUSJ',
-    clear: 'C4EBQw==',
-  },
-  events: [
-    {
-      name: 'RequestCreated',
-      args: [
-        { type: 'uint64', name: 'requestId' },
-        { type: 'uint64', name: 'requesterAppId' },
-        { type: 'address', name: 'requesterAddress' },
-        { type: 'uint64', name: 'round' },
-      ],
-    },
-    {
-      name: 'RequestCancelled',
-      args: [
-        { type: 'uint64', name: 'requestId' },
-        { type: 'uint64', name: 'requesterAppId' },
-        { type: 'address', name: 'requesterAddress' },
-      ],
-    },
-    {
-      name: 'RequestFulfilled',
-      args: [
-        { type: 'uint64', name: 'requestId' },
-        { type: 'uint64', name: 'requesterAppId' },
-        { type: 'address', name: 'requesterAddress' },
-      ],
-    },
-  ],
-  templateVariables: {},
-} as unknown as Arc56Contract
+export const APP_SPEC: Arc56Contract = {"name":"RandomnessBeacon","structs":{"RandomnessRequest":[{"name":"createdAt","type":"uint64"},{"name":"requesterAppId","type":"uint64"},{"name":"requesterAddress","type":"address"},{"name":"round","type":"uint64"},{"name":"feePaid","type":"uint64"},{"name":"boxCost","type":"uint64"}]},"methods":[{"name":"createApplication","args":[{"type":"byte[32]","name":"publicKey","desc":"the public key used to verify VRF proofs we will accept"},{"type":"uint64","name":"maxPendingRequests","desc":"the maximum number of pending requests allowed at any time"},{"type":"uint64","name":"maxFutureRounds","desc":"the maximum round in the future a request can be targeted"},{"type":"uint64","name":"staleRequestTimeout"}],"returns":{"type":"void"},"actions":{"create":["NoOp"],"call":[]},"readonly":false,"desc":"Called upon application creation","events":[],"recommendations":{}},{"name":"updateApplication","args":[],"returns":{"type":"void"},"actions":{"create":[],"call":["UpdateApplication"]},"readonly":false,"events":[],"recommendations":{}},{"name":"deleteApplication","args":[],"returns":{"type":"void"},"actions":{"create":[],"call":["DeleteApplication"]},"readonly":false,"events":[],"recommendations":{}},{"name":"createRequest","args":[{"type":"address","name":"requesterAddress","desc":"who the request is on behalf of?"},{"type":"uint64","name":"round","desc":"the round to request the randomness for"},{"type":"pay","name":"costsPayment","desc":"payment covering txnFees + boxCost"}],"returns":{"type":"uint64","desc":"a unique request ID to be used to identify the request"},"actions":{"create":[],"call":["NoOp"]},"readonly":false,"events":[{"name":"RequestCreated","args":[{"type":"uint64","name":"requestId"},{"type":"uint64","name":"requesterAppId"},{"type":"address","name":"requesterAddress"},{"type":"uint64","name":"round"}]}],"recommendations":{}},{"name":"cancelRequest","args":[{"type":"uint64","name":"requestId"}],"returns":{"type":"void"},"actions":{"create":[],"call":["NoOp"]},"readonly":false,"events":[{"name":"RequestCancelled","args":[{"type":"uint64","name":"requestId"},{"type":"uint64","name":"requesterAppId"},{"type":"address","name":"requesterAddress"}]}],"recommendations":{}},{"name":"completeRequest","args":[{"type":"uint64","name":"requestId","desc":"the ID of the VRF request"},{"type":"byte[80]","name":"proof","desc":"the VRF proof output using the `targetRound` block seed of the targeted RandomnessBeaconRequest"}],"returns":{"type":"void"},"actions":{"create":[],"call":["NoOp"]},"readonly":false,"events":[{"name":"RequestFulfilled","args":[{"type":"uint64","name":"requestId"},{"type":"uint64","name":"requesterAppId"},{"type":"address","name":"requesterAddress"}]}],"recommendations":{}},{"name":"getCosts","args":[],"returns":{"type":"(uint64,uint64)","desc":"arc4.Tuple<[txnFees, boxCost] - tuple of the required txn fees and box cost (that will be refunded)"},"actions":{"create":[],"call":["NoOp"]},"readonly":true,"desc":"\nConvenience function to get associated costs with using the beacon service","events":[],"recommendations":{}},{"name":"updateManager","args":[{"type":"address","name":"newManager"}],"returns":{"type":"void"},"actions":{"create":[],"call":["NoOp"]},"readonly":false,"desc":"Update the manager of this contract","events":[],"recommendations":{}},{"name":"deleteManager","args":[],"returns":{"type":"void"},"actions":{"create":[],"call":["NoOp"]},"readonly":false,"desc":"Delete the manager of this contract","events":[],"recommendations":{}},{"name":"manager","args":[],"returns":{"type":"address","desc":"The current manager of this contract"},"actions":{"create":[],"call":["NoOp"]},"readonly":true,"desc":"Convenience function to get the current manager of this contract","events":[],"recommendations":{}},{"name":"pause","args":[],"returns":{"type":"void"},"actions":{"create":[],"call":["NoOp"]},"readonly":false,"events":[],"recommendations":{}},{"name":"unpause","args":[],"returns":{"type":"void"},"actions":{"create":[],"call":["NoOp"]},"readonly":false,"events":[],"recommendations":{}},{"name":"updatePauser","args":[{"type":"address","name":"_newPauser"}],"returns":{"type":"void"},"actions":{"create":[],"call":["NoOp"]},"readonly":false,"events":[],"recommendations":{}},{"name":"pauser","args":[],"returns":{"type":"address","desc":"The current pauser"},"actions":{"create":[],"call":["NoOp"]},"readonly":true,"desc":"Convenience function to get the pauser","events":[],"recommendations":{}}],"arcs":[22,28],"networks":{},"state":{"schema":{"global":{"ints":0,"bytes":9},"local":{"ints":0,"bytes":0}},"keys":{"global":{"publicKey":{"keyType":"AVMString","valueType":"byte[32]","key":"cHVibGljS2V5"},"nextRequestId":{"keyType":"AVMString","valueType":"uint64","key":"bmV4dFJlcXVlc3RJZA=="},"maxFutureRounds":{"keyType":"AVMString","valueType":"uint64","key":"bWF4RnV0dXJlUm91bmRz","desc":"Max rounds in the future ([current round] + maxFutureRounds) allowed for requests"},"maxPendingRequests":{"keyType":"AVMString","valueType":"uint64","key":"bWF4UGVuZGluZ1JlcXVlc3Rz","desc":"Max number of pending requests allowed"},"staleRequestTimeout":{"keyType":"AVMString","valueType":"uint64","key":"c3RhbGVSZXF1ZXN0VGltZW91dA==","desc":"Stale request timeout in rounds (after which a request can be cancelled after RandomnessRequest.round)"},"totalPendingRequests":{"keyType":"AVMString","valueType":"uint64","key":"dG90YWxQZW5kaW5nUmVxdWVzdHM="},"_manager":{"keyType":"AVMString","valueType":"address","key":"bWFuYWdlcg=="},"_pauser":{"keyType":"AVMString","valueType":"address","key":"cGF1c2Vy"},"paused":{"keyType":"AVMString","valueType":"bool","key":"cGF1c2Vk"}},"local":{},"box":{}},"maps":{"global":{},"local":{},"box":{"requests":{"keyType":"uint64","valueType":"RandomnessRequest","prefix":"cmVxdWVzdHM="}}}},"bareActions":{"create":[],"call":[]},"sourceInfo":{"approval":{"sourceInfo":[{"pc":[852,1016],"errorMessage":"Box must have value"},{"pc":[714,881,976,1073,1082],"errorMessage":"Index access is out of bounds"},{"pc":[507],"errorMessage":"OnCompletion is not DeleteApplication"},{"pc":[322,339,354,366,378,395,407,422,439,457,472,533],"errorMessage":"OnCompletion is not NoOp"},{"pc":[521],"errorMessage":"OnCompletion is not UpdateApplication"},{"pc":[537],"errorMessage":"can only call when creating"},{"pc":[325,342,357,369,381,398,410,425,442,460,475,510,524],"errorMessage":"can only call when not creating"},{"pc":[686],"errorMessage":"cannot exceed max pending requests"},{"pc":[561,611,669,677,683,701,784,805,864,1059,1226,1260,1265,1309],"errorMessage":"check GlobalState exists"},{"pc":[745],"errorMessage":"costs payment must be valid"},{"pc":[705],"errorMessage":"error: round exceeds max future round"},{"pc":[1090],"errorMessage":"invalid size"},{"pc":[1243],"errorMessage":"manager cannot be zero address"},{"pc":[694],"errorMessage":"must be a future round"},{"pc":[709],"errorMessage":"must be called by an application"},{"pc":[614],"errorMessage":"no pending requests"},{"pc":[1230],"errorMessage":"only manager can perform this action"},{"pc":[1269],"errorMessage":"only pauser can call this method"},{"pc":[1300],"errorMessage":"pauser cannot be zero address"},{"pc":[1068],"errorMessage":"proof must be valid"},{"pc":[868],"errorMessage":"request must be stale to cancel"},{"pc":[491],"errorMessage":"transaction type is pay"}],"pcOffsetMethod":"none"},"clear":{"sourceInfo":[],"pcOffsetMethod":"none"}},"source":{"approval":"I3ByYWdtYSB2ZXJzaW9uIDExCiNwcmFnbWEgdHlwZXRyYWNrIGZhbHNlCgovLyBAYWxnb3JhbmRmb3VuZGF0aW9uL2FsZ29yYW5kLXR5cGVzY3JpcHQvYXJjNC9pbmRleC5kLnRzOjpDb250cmFjdC5hcHByb3ZhbFByb2dyYW0oKSAtPiB1aW50NjQ6Cm1haW46CiAgICBpbnRjYmxvY2sgMCAxIDggNjQKICAgIGJ5dGVjYmxvY2sgInRvdGFsUGVuZGluZ1JlcXVlc3RzIiAibWFuYWdlciIgInBhdXNlciIgInBhdXNlZCIgMHgxNTFmN2M3NSAicmVxdWVzdHMiICJuZXh0UmVxdWVzdElkIiAicHVibGljS2V5IiAibWF4UGVuZGluZ1JlcXVlc3RzIiAibWF4RnV0dXJlUm91bmRzIiAic3RhbGVSZXF1ZXN0VGltZW91dCIgImJveCBtYnIgcmVmdW5kIiAweDA2ODEwMQogICAgdHhuIEFwcGxpY2F0aW9uSUQKICAgIGJueiBtYWluX2FmdGVyX2lmX2Vsc2VAMgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czoxNQogICAgLy8ga2V5OiAnbWFuYWdlcicsCiAgICBieXRlY18xIC8vICJtYW5hZ2VyIgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czoxNgogICAgLy8gaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5BZGRyZXNzKEdsb2JhbC5jcmVhdG9yQWRkcmVzcyksCiAgICBnbG9iYWwgQ3JlYXRvckFkZHJlc3MKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6MTQtMTcKICAgIC8vIHByaXZhdGUgX21hbmFnZXIgPSBHbG9iYWxTdGF0ZTxhcmM0LkFkZHJlc3M+KHsKICAgIC8vICAga2V5OiAnbWFuYWdlcicsCiAgICAvLyAgIGluaXRpYWxWYWx1ZTogbmV3IGFyYzQuQWRkcmVzcyhHbG9iYWwuY3JlYXRvckFkZHJlc3MpLAogICAgLy8gfSkKICAgIGFwcF9nbG9iYWxfcHV0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6OAogICAgLy8ga2V5OiAncGF1c2VyJywKICAgIGJ5dGVjXzIgLy8gInBhdXNlciIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czo5CiAgICAvLyBpbml0aWFsVmFsdWU6IG5ldyBhcmM0LkFkZHJlc3MoR2xvYmFsLmNyZWF0b3JBZGRyZXNzKSwKICAgIGdsb2JhbCBDcmVhdG9yQWRkcmVzcwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjctMTAKICAgIC8vIHByaXZhdGUgX3BhdXNlciA9IEdsb2JhbFN0YXRlPGFyYzQuQWRkcmVzcz4oewogICAgLy8gICBrZXk6ICdwYXVzZXInLAogICAgLy8gICBpbml0aWFsVmFsdWU6IG5ldyBhcmM0LkFkZHJlc3MoR2xvYmFsLmNyZWF0b3JBZGRyZXNzKSwKICAgIC8vIH0pCiAgICBhcHBfZ2xvYmFsX3B1dAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjEzCiAgICAvLyBwYXVzZWQgPSBHbG9iYWxTdGF0ZTxhcmM0LkJvb2w+KHsga2V5OiAncGF1c2VkJywgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5Cb29sKGZhbHNlKSB9KQogICAgYnl0ZWNfMyAvLyAicGF1c2VkIgogICAgcHVzaGJ5dGVzIDB4MDAKICAgIGFwcF9nbG9iYWxfcHV0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo1MAogICAgLy8gbmV4dFJlcXVlc3RJZCA9IEdsb2JhbFN0YXRlPGFyYzQuVWludE42ND4oeyBrZXk6ICduZXh0UmVxdWVzdElkJywgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5VaW50TjY0KDEpIH0pCiAgICBieXRlYyA2IC8vICJuZXh0UmVxdWVzdElkIgogICAgcHVzaGJ5dGVzIDB4MDAwMDAwMDAwMDAwMDAwMQogICAgYXBwX2dsb2JhbF9wdXQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjc3CiAgICAvLyB0b3RhbFBlbmRpbmdSZXF1ZXN0cyA9IEdsb2JhbFN0YXRlPGFyYzQuVWludE42ND4oeyBrZXk6ICd0b3RhbFBlbmRpbmdSZXF1ZXN0cycsIGluaXRpYWxWYWx1ZTogbmV3IGFyYzQuVWludE42NCgwKSB9KQogICAgYnl0ZWNfMCAvLyAidG90YWxQZW5kaW5nUmVxdWVzdHMiCiAgICBwdXNoYnl0ZXMgMHgwMDAwMDAwMDAwMDAwMDAwCiAgICBhcHBfZ2xvYmFsX3B1dAoKbWFpbl9hZnRlcl9pZl9lbHNlQDI6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo0NC00NQogICAgLy8gQGNvbnRyYWN0KHsgbmFtZTogJ1JhbmRvbW5lc3NCZWFjb24nLCBhdm1WZXJzaW9uOiAxMSB9KQogICAgLy8gZXhwb3J0IGNsYXNzIFJhbmRvbW5lc3NCZWFjb24gZXh0ZW5kcyBjbGFzc2VzKE1hbmFnYWJsZSwgUGF1c2FibGUsIENvbnRyYWN0KSBpbXBsZW1lbnRzIGFyYzQuQ29udmVudGlvbmFsUm91dGluZyB7CiAgICB0eG4gTnVtQXBwQXJncwogICAgYnogbWFpbl9hZnRlcl9pZl9lbHNlQDIyCiAgICBwdXNoYnl0ZXNzIDB4ZDVjYWU0YzYgMHg0NmY3NjUzMyAweDI0ODdjMzJjIDB4ZDg5OGVlYjcgMHhmMTJjNjI5ZSAweDIxYjY5YzU5IDB4NmMxOTYxNWEgMHg4OTYwMTY4ZSAweGQ0OGQ0MjZjIDB4Njc0MzQwMzEgMHgwMTc4Zjk0YiAweDFiNTI5ZGU4IDB4MGNhZGQxNjMgMHhiMGQ5NTNiMyAvLyBtZXRob2QgImNyZWF0ZUFwcGxpY2F0aW9uKGJ5dGVbMzJdLHVpbnQ2NCx1aW50NjQsdWludDY0KXZvaWQiLCBtZXRob2QgInVwZGF0ZUFwcGxpY2F0aW9uKCl2b2lkIiwgbWV0aG9kICJkZWxldGVBcHBsaWNhdGlvbigpdm9pZCIsIG1ldGhvZCAiY3JlYXRlUmVxdWVzdChhZGRyZXNzLHVpbnQ2NCxwYXkpdWludDY0IiwgbWV0aG9kICJjYW5jZWxSZXF1ZXN0KHVpbnQ2NCl2b2lkIiwgbWV0aG9kICJjb21wbGV0ZVJlcXVlc3QodWludDY0LGJ5dGVbODBdKXZvaWQiLCBtZXRob2QgImdldENvc3RzKCkodWludDY0LHVpbnQ2NCkiLCBtZXRob2QgInVwZGF0ZU1hbmFnZXIoYWRkcmVzcyl2b2lkIiwgbWV0aG9kICJkZWxldGVNYW5hZ2VyKCl2b2lkIiwgbWV0aG9kICJtYW5hZ2VyKClhZGRyZXNzIiwgbWV0aG9kICJwYXVzZSgpdm9pZCIsIG1ldGhvZCAidW5wYXVzZSgpdm9pZCIsIG1ldGhvZCAidXBkYXRlUGF1c2VyKGFkZHJlc3Mpdm9pZCIsIG1ldGhvZCAicGF1c2VyKClhZGRyZXNzIgogICAgdHhuYSBBcHBsaWNhdGlvbkFyZ3MgMAogICAgbWF0Y2ggbWFpbl9jcmVhdGVBcHBsaWNhdGlvbl9yb3V0ZUA1IG1haW5fdXBkYXRlQXBwbGljYXRpb25fcm91dGVANiBtYWluX2RlbGV0ZUFwcGxpY2F0aW9uX3JvdXRlQDcgbWFpbl9jcmVhdGVSZXF1ZXN0X3JvdXRlQDggbWFpbl9jYW5jZWxSZXF1ZXN0X3JvdXRlQDkgbWFpbl9jb21wbGV0ZVJlcXVlc3Rfcm91dGVAMTAgbWFpbl9nZXRDb3N0c19yb3V0ZUAxMSBtYWluX3VwZGF0ZU1hbmFnZXJfcm91dGVAMTIgbWFpbl9kZWxldGVNYW5hZ2VyX3JvdXRlQDEzIG1haW5fbWFuYWdlcl9yb3V0ZUAxNCBtYWluX3BhdXNlX3JvdXRlQDE1IG1haW5fdW5wYXVzZV9yb3V0ZUAxNiBtYWluX3VwZGF0ZVBhdXNlcl9yb3V0ZUAxNyBtYWluX3BhdXNlcl9yb3V0ZUAxOAoKbWFpbl9hZnRlcl9pZl9lbHNlQDIyOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NDQtNDUKICAgIC8vIEBjb250cmFjdCh7IG5hbWU6ICdSYW5kb21uZXNzQmVhY29uJywgYXZtVmVyc2lvbjogMTEgfSkKICAgIC8vIGV4cG9ydCBjbGFzcyBSYW5kb21uZXNzQmVhY29uIGV4dGVuZHMgY2xhc3NlcyhNYW5hZ2FibGUsIFBhdXNhYmxlLCBDb250cmFjdCkgaW1wbGVtZW50cyBhcmM0LkNvbnZlbnRpb25hbFJvdXRpbmcgewogICAgaW50Y18wIC8vIDAKICAgIHJldHVybgoKbWFpbl9wYXVzZXJfcm91dGVAMTg6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6NTAKICAgIC8vIEBhcmM0LmFiaW1ldGhvZCh7IHJlYWRvbmx5OiB0cnVlIH0pCiAgICB0eG4gT25Db21wbGV0aW9uCiAgICAhCiAgICBhc3NlcnQgLy8gT25Db21wbGV0aW9uIGlzIG5vdCBOb09wCiAgICB0eG4gQXBwbGljYXRpb25JRAogICAgYXNzZXJ0IC8vIGNhbiBvbmx5IGNhbGwgd2hlbiBub3QgY3JlYXRpbmcKICAgIGNhbGxzdWIgcGF1c2VyCiAgICBieXRlYyA0IC8vIDB4MTUxZjdjNzUKICAgIHN3YXAKICAgIGNvbmNhdAogICAgbG9nCiAgICBpbnRjXzEgLy8gMQogICAgcmV0dXJuCgptYWluX3VwZGF0ZVBhdXNlcl9yb3V0ZUAxNzoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czozNwogICAgLy8gdXBkYXRlUGF1c2VyKF9uZXdQYXVzZXI6IGFyYzQuQWRkcmVzcyk6IHZvaWQgewogICAgdHhuIE9uQ29tcGxldGlvbgogICAgIQogICAgYXNzZXJ0IC8vIE9uQ29tcGxldGlvbiBpcyBub3QgTm9PcAogICAgdHhuIEFwcGxpY2F0aW9uSUQKICAgIGFzc2VydCAvLyBjYW4gb25seSBjYWxsIHdoZW4gbm90IGNyZWF0aW5nCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo0NC00NQogICAgLy8gQGNvbnRyYWN0KHsgbmFtZTogJ1JhbmRvbW5lc3NCZWFjb24nLCBhdm1WZXJzaW9uOiAxMSB9KQogICAgLy8gZXhwb3J0IGNsYXNzIFJhbmRvbW5lc3NCZWFjb24gZXh0ZW5kcyBjbGFzc2VzKE1hbmFnYWJsZSwgUGF1c2FibGUsIENvbnRyYWN0KSBpbXBsZW1lbnRzIGFyYzQuQ29udmVudGlvbmFsUm91dGluZyB7CiAgICB0eG5hIEFwcGxpY2F0aW9uQXJncyAxCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6MzcKICAgIC8vIHVwZGF0ZVBhdXNlcihfbmV3UGF1c2VyOiBhcmM0LkFkZHJlc3MpOiB2b2lkIHsKICAgIGNhbGxzdWIgdXBkYXRlUGF1c2VyCiAgICBpbnRjXzEgLy8gMQogICAgcmV0dXJuCgptYWluX3VucGF1c2Vfcm91dGVAMTY6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6MzEKICAgIC8vIHVucGF1c2UoKTogdm9pZCB7CiAgICB0eG4gT25Db21wbGV0aW9uCiAgICAhCiAgICBhc3NlcnQgLy8gT25Db21wbGV0aW9uIGlzIG5vdCBOb09wCiAgICB0eG4gQXBwbGljYXRpb25JRAogICAgYXNzZXJ0IC8vIGNhbiBvbmx5IGNhbGwgd2hlbiBub3QgY3JlYXRpbmcKICAgIGNhbGxzdWIgdW5wYXVzZQogICAgaW50Y18xIC8vIDEKICAgIHJldHVybgoKbWFpbl9wYXVzZV9yb3V0ZUAxNToKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czoyMwogICAgLy8gcGF1c2UoKTogdm9pZCB7CiAgICB0eG4gT25Db21wbGV0aW9uCiAgICAhCiAgICBhc3NlcnQgLy8gT25Db21wbGV0aW9uIGlzIG5vdCBOb09wCiAgICB0eG4gQXBwbGljYXRpb25JRAogICAgYXNzZXJ0IC8vIGNhbiBvbmx5IGNhbGwgd2hlbiBub3QgY3JlYXRpbmcKICAgIGNhbGxzdWIgcGF1c2UKICAgIGludGNfMSAvLyAxCiAgICByZXR1cm4KCm1haW5fbWFuYWdlcl9yb3V0ZUAxNDoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6NTUKICAgIC8vIEBhcmM0LmFiaW1ldGhvZCh7IHJlYWRvbmx5OiB0cnVlIH0pCiAgICB0eG4gT25Db21wbGV0aW9uCiAgICAhCiAgICBhc3NlcnQgLy8gT25Db21wbGV0aW9uIGlzIG5vdCBOb09wCiAgICB0eG4gQXBwbGljYXRpb25JRAogICAgYXNzZXJ0IC8vIGNhbiBvbmx5IGNhbGwgd2hlbiBub3QgY3JlYXRpbmcKICAgIGNhbGxzdWIgbWFuYWdlcgogICAgYnl0ZWMgNCAvLyAweDE1MWY3Yzc1CiAgICBzd2FwCiAgICBjb25jYXQKICAgIGxvZwogICAgaW50Y18xIC8vIDEKICAgIHJldHVybgoKbWFpbl9kZWxldGVNYW5hZ2VyX3JvdXRlQDEzOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czo0NAogICAgLy8gcHVibGljIGRlbGV0ZU1hbmFnZXIoKTogdm9pZCB7CiAgICB0eG4gT25Db21wbGV0aW9uCiAgICAhCiAgICBhc3NlcnQgLy8gT25Db21wbGV0aW9uIGlzIG5vdCBOb09wCiAgICB0eG4gQXBwbGljYXRpb25JRAogICAgYXNzZXJ0IC8vIGNhbiBvbmx5IGNhbGwgd2hlbiBub3QgY3JlYXRpbmcKICAgIGNhbGxzdWIgZGVsZXRlTWFuYWdlcgogICAgaW50Y18xIC8vIDEKICAgIHJldHVybgoKbWFpbl91cGRhdGVNYW5hZ2VyX3JvdXRlQDEyOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czozMQogICAgLy8gcHVibGljIHVwZGF0ZU1hbmFnZXIobmV3TWFuYWdlcjogYXJjNC5BZGRyZXNzKTogdm9pZCB7CiAgICB0eG4gT25Db21wbGV0aW9uCiAgICAhCiAgICBhc3NlcnQgLy8gT25Db21wbGV0aW9uIGlzIG5vdCBOb09wCiAgICB0eG4gQXBwbGljYXRpb25JRAogICAgYXNzZXJ0IC8vIGNhbiBvbmx5IGNhbGwgd2hlbiBub3QgY3JlYXRpbmcKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjQ0LTQ1CiAgICAvLyBAY29udHJhY3QoeyBuYW1lOiAnUmFuZG9tbmVzc0JlYWNvbicsIGF2bVZlcnNpb246IDExIH0pCiAgICAvLyBleHBvcnQgY2xhc3MgUmFuZG9tbmVzc0JlYWNvbiBleHRlbmRzIGNsYXNzZXMoTWFuYWdhYmxlLCBQYXVzYWJsZSwgQ29udHJhY3QpIGltcGxlbWVudHMgYXJjNC5Db252ZW50aW9uYWxSb3V0aW5nIHsKICAgIHR4bmEgQXBwbGljYXRpb25BcmdzIDEKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6MzEKICAgIC8vIHB1YmxpYyB1cGRhdGVNYW5hZ2VyKG5ld01hbmFnZXI6IGFyYzQuQWRkcmVzcyk6IHZvaWQgewogICAgY2FsbHN1YiB1cGRhdGVNYW5hZ2VyCiAgICBpbnRjXzEgLy8gMQogICAgcmV0dXJuCgptYWluX2dldENvc3RzX3JvdXRlQDExOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MzM4CiAgICAvLyBAYWJpbWV0aG9kKHsgcmVhZG9ubHk6IHRydWUgfSkKICAgIHR4biBPbkNvbXBsZXRpb24KICAgICEKICAgIGFzc2VydCAvLyBPbkNvbXBsZXRpb24gaXMgbm90IE5vT3AKICAgIHR4biBBcHBsaWNhdGlvbklECiAgICBhc3NlcnQgLy8gY2FuIG9ubHkgY2FsbCB3aGVuIG5vdCBjcmVhdGluZwogICAgY2FsbHN1YiBnZXRDb3N0cwogICAgYnl0ZWMgNCAvLyAweDE1MWY3Yzc1CiAgICBzd2FwCiAgICBjb25jYXQKICAgIGxvZwogICAgaW50Y18xIC8vIDEKICAgIHJldHVybgoKbWFpbl9jb21wbGV0ZVJlcXVlc3Rfcm91dGVAMTA6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyNzkKICAgIC8vIHB1YmxpYyBjb21wbGV0ZVJlcXVlc3QocmVxdWVzdElkOiBhcmM0LlVpbnRONjQsIHByb29mOiBhcmM0LlN0YXRpY0J5dGVzPDgwPik6IHZvaWQgewogICAgdHhuIE9uQ29tcGxldGlvbgogICAgIQogICAgYXNzZXJ0IC8vIE9uQ29tcGxldGlvbiBpcyBub3QgTm9PcAogICAgdHhuIEFwcGxpY2F0aW9uSUQKICAgIGFzc2VydCAvLyBjYW4gb25seSBjYWxsIHdoZW4gbm90IGNyZWF0aW5nCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo0NC00NQogICAgLy8gQGNvbnRyYWN0KHsgbmFtZTogJ1JhbmRvbW5lc3NCZWFjb24nLCBhdm1WZXJzaW9uOiAxMSB9KQogICAgLy8gZXhwb3J0IGNsYXNzIFJhbmRvbW5lc3NCZWFjb24gZXh0ZW5kcyBjbGFzc2VzKE1hbmFnYWJsZSwgUGF1c2FibGUsIENvbnRyYWN0KSBpbXBsZW1lbnRzIGFyYzQuQ29udmVudGlvbmFsUm91dGluZyB7CiAgICB0eG5hIEFwcGxpY2F0aW9uQXJncyAxCiAgICB0eG5hIEFwcGxpY2F0aW9uQXJncyAyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyNzkKICAgIC8vIHB1YmxpYyBjb21wbGV0ZVJlcXVlc3QocmVxdWVzdElkOiBhcmM0LlVpbnRONjQsIHByb29mOiBhcmM0LlN0YXRpY0J5dGVzPDgwPik6IHZvaWQgewogICAgY2FsbHN1YiBjb21wbGV0ZVJlcXVlc3QKICAgIGludGNfMSAvLyAxCiAgICByZXR1cm4KCm1haW5fY2FuY2VsUmVxdWVzdF9yb3V0ZUA5OgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjE4CiAgICAvLyBwdWJsaWMgY2FuY2VsUmVxdWVzdChyZXF1ZXN0SWQ6IGFyYzQuVWludE42NCk6IHZvaWQgewogICAgdHhuIE9uQ29tcGxldGlvbgogICAgIQogICAgYXNzZXJ0IC8vIE9uQ29tcGxldGlvbiBpcyBub3QgTm9PcAogICAgdHhuIEFwcGxpY2F0aW9uSUQKICAgIGFzc2VydCAvLyBjYW4gb25seSBjYWxsIHdoZW4gbm90IGNyZWF0aW5nCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo0NC00NQogICAgLy8gQGNvbnRyYWN0KHsgbmFtZTogJ1JhbmRvbW5lc3NCZWFjb24nLCBhdm1WZXJzaW9uOiAxMSB9KQogICAgLy8gZXhwb3J0IGNsYXNzIFJhbmRvbW5lc3NCZWFjb24gZXh0ZW5kcyBjbGFzc2VzKE1hbmFnYWJsZSwgUGF1c2FibGUsIENvbnRyYWN0KSBpbXBsZW1lbnRzIGFyYzQuQ29udmVudGlvbmFsUm91dGluZyB7CiAgICB0eG5hIEFwcGxpY2F0aW9uQXJncyAxCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyMTgKICAgIC8vIHB1YmxpYyBjYW5jZWxSZXF1ZXN0KHJlcXVlc3RJZDogYXJjNC5VaW50TjY0KTogdm9pZCB7CiAgICBjYWxsc3ViIGNhbmNlbFJlcXVlc3QKICAgIGludGNfMSAvLyAxCiAgICByZXR1cm4KCm1haW5fY3JlYXRlUmVxdWVzdF9yb3V0ZUA4OgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTUzLTE1NwogICAgLy8gcHVibGljIGNyZWF0ZVJlcXVlc3QoCiAgICAvLyAgIHJlcXVlc3RlckFkZHJlc3M6IGFyYzQuQWRkcmVzcywKICAgIC8vICAgcm91bmQ6IGFyYzQuVWludE42NCwKICAgIC8vICAgY29zdHNQYXltZW50OiBndHhuLlBheW1lbnRUeG4sCiAgICAvLyApOiBhcmM0LlVpbnRONjQgewogICAgdHhuIE9uQ29tcGxldGlvbgogICAgIQogICAgYXNzZXJ0IC8vIE9uQ29tcGxldGlvbiBpcyBub3QgTm9PcAogICAgdHhuIEFwcGxpY2F0aW9uSUQKICAgIGFzc2VydCAvLyBjYW4gb25seSBjYWxsIHdoZW4gbm90IGNyZWF0aW5nCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo0NC00NQogICAgLy8gQGNvbnRyYWN0KHsgbmFtZTogJ1JhbmRvbW5lc3NCZWFjb24nLCBhdm1WZXJzaW9uOiAxMSB9KQogICAgLy8gZXhwb3J0IGNsYXNzIFJhbmRvbW5lc3NCZWFjb24gZXh0ZW5kcyBjbGFzc2VzKE1hbmFnYWJsZSwgUGF1c2FibGUsIENvbnRyYWN0KSBpbXBsZW1lbnRzIGFyYzQuQ29udmVudGlvbmFsUm91dGluZyB7CiAgICB0eG5hIEFwcGxpY2F0aW9uQXJncyAxCiAgICB0eG5hIEFwcGxpY2F0aW9uQXJncyAyCiAgICB0eG4gR3JvdXBJbmRleAogICAgaW50Y18xIC8vIDEKICAgIC0KICAgIGR1cAogICAgZ3R4bnMgVHlwZUVudW0KICAgIGludGNfMSAvLyBwYXkKICAgID09CiAgICBhc3NlcnQgLy8gdHJhbnNhY3Rpb24gdHlwZSBpcyBwYXkKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE1My0xNTcKICAgIC8vIHB1YmxpYyBjcmVhdGVSZXF1ZXN0KAogICAgLy8gICByZXF1ZXN0ZXJBZGRyZXNzOiBhcmM0LkFkZHJlc3MsCiAgICAvLyAgIHJvdW5kOiBhcmM0LlVpbnRONjQsCiAgICAvLyAgIGNvc3RzUGF5bWVudDogZ3R4bi5QYXltZW50VHhuLAogICAgLy8gKTogYXJjNC5VaW50TjY0IHsKICAgIGNhbGxzdWIgY3JlYXRlUmVxdWVzdAogICAgYnl0ZWMgNCAvLyAweDE1MWY3Yzc1CiAgICBzd2FwCiAgICBjb25jYXQKICAgIGxvZwogICAgaW50Y18xIC8vIDEKICAgIHJldHVybgoKbWFpbl9kZWxldGVBcHBsaWNhdGlvbl9yb3V0ZUA3OgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTMzCiAgICAvLyBkZWxldGVBcHBsaWNhdGlvbigpOiB2b2lkIHsKICAgIHR4biBPbkNvbXBsZXRpb24KICAgIHB1c2hpbnQgNSAvLyBEZWxldGVBcHBsaWNhdGlvbgogICAgPT0KICAgIGFzc2VydCAvLyBPbkNvbXBsZXRpb24gaXMgbm90IERlbGV0ZUFwcGxpY2F0aW9uCiAgICB0eG4gQXBwbGljYXRpb25JRAogICAgYXNzZXJ0IC8vIGNhbiBvbmx5IGNhbGwgd2hlbiBub3QgY3JlYXRpbmcKICAgIGNhbGxzdWIgZGVsZXRlQXBwbGljYXRpb24KICAgIGludGNfMSAvLyAxCiAgICByZXR1cm4KCm1haW5fdXBkYXRlQXBwbGljYXRpb25fcm91dGVANjoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjEyOAogICAgLy8gdXBkYXRlQXBwbGljYXRpb24oKTogdm9pZCB7CiAgICB0eG4gT25Db21wbGV0aW9uCiAgICBwdXNoaW50IDQgLy8gVXBkYXRlQXBwbGljYXRpb24KICAgID09CiAgICBhc3NlcnQgLy8gT25Db21wbGV0aW9uIGlzIG5vdCBVcGRhdGVBcHBsaWNhdGlvbgogICAgdHhuIEFwcGxpY2F0aW9uSUQKICAgIGFzc2VydCAvLyBjYW4gb25seSBjYWxsIHdoZW4gbm90IGNyZWF0aW5nCiAgICBjYWxsc3ViIHVwZGF0ZUFwcGxpY2F0aW9uCiAgICBpbnRjXzEgLy8gMQogICAgcmV0dXJuCgptYWluX2NyZWF0ZUFwcGxpY2F0aW9uX3JvdXRlQDU6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMTEtMTE2CiAgICAvLyBjcmVhdGVBcHBsaWNhdGlvbigKICAgIC8vICAgcHVibGljS2V5OiBhcmM0LlN0YXRpY0J5dGVzPDMyPiwKICAgIC8vICAgbWF4UGVuZGluZ1JlcXVlc3RzOiBhcmM0LlVpbnRONjQsCiAgICAvLyAgIG1heEZ1dHVyZVJvdW5kczogYXJjNC5VaW50TjY0LAogICAgLy8gICBzdGFsZVJlcXVlc3RUaW1lb3V0OiBhcmM0LlVpbnRONjQsCiAgICAvLyApOiB2b2lkIHsKICAgIHR4biBPbkNvbXBsZXRpb24KICAgICEKICAgIGFzc2VydCAvLyBPbkNvbXBsZXRpb24gaXMgbm90IE5vT3AKICAgIHR4biBBcHBsaWNhdGlvbklECiAgICAhCiAgICBhc3NlcnQgLy8gY2FuIG9ubHkgY2FsbCB3aGVuIGNyZWF0aW5nCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo0NC00NQogICAgLy8gQGNvbnRyYWN0KHsgbmFtZTogJ1JhbmRvbW5lc3NCZWFjb24nLCBhdm1WZXJzaW9uOiAxMSB9KQogICAgLy8gZXhwb3J0IGNsYXNzIFJhbmRvbW5lc3NCZWFjb24gZXh0ZW5kcyBjbGFzc2VzKE1hbmFnYWJsZSwgUGF1c2FibGUsIENvbnRyYWN0KSBpbXBsZW1lbnRzIGFyYzQuQ29udmVudGlvbmFsUm91dGluZyB7CiAgICB0eG5hIEFwcGxpY2F0aW9uQXJncyAxCiAgICB0eG5hIEFwcGxpY2F0aW9uQXJncyAyCiAgICB0eG5hIEFwcGxpY2F0aW9uQXJncyAzCiAgICB0eG5hIEFwcGxpY2F0aW9uQXJncyA0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMTEtMTE2CiAgICAvLyBjcmVhdGVBcHBsaWNhdGlvbigKICAgIC8vICAgcHVibGljS2V5OiBhcmM0LlN0YXRpY0J5dGVzPDMyPiwKICAgIC8vICAgbWF4UGVuZGluZ1JlcXVlc3RzOiBhcmM0LlVpbnRONjQsCiAgICAvLyAgIG1heEZ1dHVyZVJvdW5kczogYXJjNC5VaW50TjY0LAogICAgLy8gICBzdGFsZVJlcXVlc3RUaW1lb3V0OiBhcmM0LlVpbnRONjQsCiAgICAvLyApOiB2b2lkIHsKICAgIGNhbGxzdWIgY3JlYXRlQXBwbGljYXRpb24KICAgIGludGNfMSAvLyAxCiAgICByZXR1cm4KCgovLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo6UmFuZG9tbmVzc0JlYWNvbi5kZWxldGVSZXF1ZXN0KHJlcXVlc3RJZDogYnl0ZXMpIC0+IHZvaWQ6CmRlbGV0ZVJlcXVlc3Q6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo4NAogICAgLy8gcHJpdmF0ZSBkZWxldGVSZXF1ZXN0KHJlcXVlc3RJZDogYXJjNC5VaW50TjY0KTogdm9pZCB7CiAgICBwcm90byAxIDAKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjc3CiAgICAvLyB0b3RhbFBlbmRpbmdSZXF1ZXN0cyA9IEdsb2JhbFN0YXRlPGFyYzQuVWludE42ND4oeyBrZXk6ICd0b3RhbFBlbmRpbmdSZXF1ZXN0cycsIGluaXRpYWxWYWx1ZTogbmV3IGFyYzQuVWludE42NCgwKSB9KQogICAgaW50Y18wIC8vIDAKICAgIGJ5dGVjXzAgLy8gInRvdGFsUGVuZGluZ1JlcXVlc3RzIgogICAgYXBwX2dsb2JhbF9nZXRfZXgKICAgIGFzc2VydCAvLyBjaGVjayBHbG9iYWxTdGF0ZSBleGlzdHMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjg2CiAgICAvLyB0aGlzLnRvdGFsUGVuZGluZ1JlcXVlc3RzLnZhbHVlID0gbmV3IGFyYzQuVWludE42NCh0aGlzLnRvdGFsUGVuZGluZ1JlcXVlc3RzLnZhbHVlLm5hdGl2ZSAtIDEpCiAgICBidG9pCiAgICBpbnRjXzEgLy8gMQogICAgLQogICAgaXRvYgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NzcKICAgIC8vIHRvdGFsUGVuZGluZ1JlcXVlc3RzID0gR2xvYmFsU3RhdGU8YXJjNC5VaW50TjY0Pih7IGtleTogJ3RvdGFsUGVuZGluZ1JlcXVlc3RzJywgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5VaW50TjY0KDApIH0pCiAgICBieXRlY18wIC8vICJ0b3RhbFBlbmRpbmdSZXF1ZXN0cyIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjg2CiAgICAvLyB0aGlzLnRvdGFsUGVuZGluZ1JlcXVlc3RzLnZhbHVlID0gbmV3IGFyYzQuVWludE42NCh0aGlzLnRvdGFsUGVuZGluZ1JlcXVlc3RzLnZhbHVlLm5hdGl2ZSAtIDEpCiAgICBzd2FwCiAgICBhcHBfZ2xvYmFsX3B1dAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NTMKICAgIC8vIHJlcXVlc3RzID0gQm94TWFwPGFyYzQuVWludE42NCwgUmFuZG9tbmVzc1JlcXVlc3Q+KHsga2V5UHJlZml4OiAncmVxdWVzdHMnIH0pCiAgICBieXRlYyA1IC8vICJyZXF1ZXN0cyIKICAgIGZyYW1lX2RpZyAtMQogICAgY29uY2F0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo4OAogICAgLy8gdGhpcy5yZXF1ZXN0cyhyZXF1ZXN0SWQpLmRlbGV0ZSgpCiAgICBib3hfZGVsCiAgICBwb3AKICAgIHJldHN1YgoKCi8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjpSYW5kb21uZXNzQmVhY29uLmNyZWF0ZUFwcGxpY2F0aW9uKHB1YmxpY0tleTogYnl0ZXMsIG1heFBlbmRpbmdSZXF1ZXN0czogYnl0ZXMsIG1heEZ1dHVyZVJvdW5kczogYnl0ZXMsIHN0YWxlUmVxdWVzdFRpbWVvdXQ6IGJ5dGVzKSAtPiB2b2lkOgpjcmVhdGVBcHBsaWNhdGlvbjoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjExMS0xMTYKICAgIC8vIGNyZWF0ZUFwcGxpY2F0aW9uKAogICAgLy8gICBwdWJsaWNLZXk6IGFyYzQuU3RhdGljQnl0ZXM8MzI+LAogICAgLy8gICBtYXhQZW5kaW5nUmVxdWVzdHM6IGFyYzQuVWludE42NCwKICAgIC8vICAgbWF4RnV0dXJlUm91bmRzOiBhcmM0LlVpbnRONjQsCiAgICAvLyAgIHN0YWxlUmVxdWVzdFRpbWVvdXQ6IGFyYzQuVWludE42NCwKICAgIC8vICk6IHZvaWQgewogICAgcHJvdG8gNCAwCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo0NwogICAgLy8gcHVibGljS2V5ID0gR2xvYmFsU3RhdGU8YXJjNC5TdGF0aWNCeXRlczwzMj4+KHsga2V5OiAncHVibGljS2V5JyB9KQogICAgYnl0ZWMgNyAvLyAicHVibGljS2V5IgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTE4CiAgICAvLyB0aGlzLnB1YmxpY0tleS52YWx1ZSA9IHB1YmxpY0tleQogICAgZnJhbWVfZGlnIC00CiAgICBhcHBfZ2xvYmFsX3B1dAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NjYKICAgIC8vIGtleTogJ21heFBlbmRpbmdSZXF1ZXN0cycsCiAgICBieXRlYyA4IC8vICJtYXhQZW5kaW5nUmVxdWVzdHMiCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMjAKICAgIC8vIHRoaXMubWF4UGVuZGluZ1JlcXVlc3RzLnZhbHVlID0gbWF4UGVuZGluZ1JlcXVlc3RzCiAgICBmcmFtZV9kaWcgLTMKICAgIGFwcF9nbG9iYWxfcHV0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo1OQogICAgLy8ga2V5OiAnbWF4RnV0dXJlUm91bmRzJywKICAgIGJ5dGVjIDkgLy8gIm1heEZ1dHVyZVJvdW5kcyIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjEyMgogICAgLy8gdGhpcy5tYXhGdXR1cmVSb3VuZHMudmFsdWUgPSBtYXhGdXR1cmVSb3VuZHMKICAgIGZyYW1lX2RpZyAtMgogICAgYXBwX2dsb2JhbF9wdXQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjczCiAgICAvLyBrZXk6ICdzdGFsZVJlcXVlc3RUaW1lb3V0JywKICAgIGJ5dGVjIDEwIC8vICJzdGFsZVJlcXVlc3RUaW1lb3V0IgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTI0CiAgICAvLyB0aGlzLnN0YWxlUmVxdWVzdFRpbWVvdXQudmFsdWUgPSBzdGFsZVJlcXVlc3RUaW1lb3V0CiAgICBmcmFtZV9kaWcgLTEKICAgIGFwcF9nbG9iYWxfcHV0CiAgICByZXRzdWIKCgovLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo6UmFuZG9tbmVzc0JlYWNvbi51cGRhdGVBcHBsaWNhdGlvbigpIC0+IHZvaWQ6CnVwZGF0ZUFwcGxpY2F0aW9uOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTI5CiAgICAvLyB0aGlzLm9ubHlNYW5hZ2VyKCkKICAgIGNhbGxzdWIgb25seU1hbmFnZXIKICAgIHJldHN1YgoKCi8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjpSYW5kb21uZXNzQmVhY29uLmRlbGV0ZUFwcGxpY2F0aW9uKCkgLT4gdm9pZDoKZGVsZXRlQXBwbGljYXRpb246CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMzQKICAgIC8vIHRoaXMub25seU1hbmFnZXIoKQogICAgY2FsbHN1YiBvbmx5TWFuYWdlcgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NzcKICAgIC8vIHRvdGFsUGVuZGluZ1JlcXVlc3RzID0gR2xvYmFsU3RhdGU8YXJjNC5VaW50TjY0Pih7IGtleTogJ3RvdGFsUGVuZGluZ1JlcXVlc3RzJywgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5VaW50TjY0KDApIH0pCiAgICBpbnRjXzAgLy8gMAogICAgYnl0ZWNfMCAvLyAidG90YWxQZW5kaW5nUmVxdWVzdHMiCiAgICBhcHBfZ2xvYmFsX2dldF9leAogICAgYXNzZXJ0IC8vIGNoZWNrIEdsb2JhbFN0YXRlIGV4aXN0cwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTM2CiAgICAvLyBhc3NlcnQodGhpcy50b3RhbFBlbmRpbmdSZXF1ZXN0cy52YWx1ZS5uYXRpdmUgPT09IDAsIEVSUl9OT19QRU5ESU5HX1JFUVVFU1RTKQogICAgYnRvaQogICAgIQogICAgYXNzZXJ0IC8vIG5vIHBlbmRpbmcgcmVxdWVzdHMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjEzOC0xNDMKICAgIC8vIGl0eG4KICAgIC8vICAgLnBheW1lbnQoewogICAgLy8gICAgIGNsb3NlUmVtYWluZGVyVG86IHRoaXMubWFuYWdlcigpLm5hdGl2ZSwKICAgIC8vICAgICBub3RlOiBOT1RFX0NMT1NFX09VVF9SRU1BSU5ERVIsCiAgICAvLyAgIH0pCiAgICAvLyAgIC5zdWJtaXQoKQogICAgaXR4bl9iZWdpbgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTQwCiAgICAvLyBjbG9zZVJlbWFpbmRlclRvOiB0aGlzLm1hbmFnZXIoKS5uYXRpdmUsCiAgICBjYWxsc3ViIG1hbmFnZXIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi90eXBlcy5hbGdvLnRzOjE3CiAgICAvLyBleHBvcnQgY29uc3QgTk9URV9DTE9TRV9PVVRfUkVNQUlOREVSID0gJ2Nsb3NlIG91dCByZW1haW5kZXIgdG8gbWFuYWdlcicKICAgIHB1c2hieXRlcyAiY2xvc2Ugb3V0IHJlbWFpbmRlciB0byBtYW5hZ2VyIgogICAgaXR4bl9maWVsZCBOb3RlCiAgICBpdHhuX2ZpZWxkIENsb3NlUmVtYWluZGVyVG8KICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjEzOC0xNDIKICAgIC8vIGl0eG4KICAgIC8vICAgLnBheW1lbnQoewogICAgLy8gICAgIGNsb3NlUmVtYWluZGVyVG86IHRoaXMubWFuYWdlcigpLm5hdGl2ZSwKICAgIC8vICAgICBub3RlOiBOT1RFX0NMT1NFX09VVF9SRU1BSU5ERVIsCiAgICAvLyAgIH0pCiAgICBpbnRjXzEgLy8gMQogICAgaXR4bl9maWVsZCBUeXBlRW51bQogICAgaW50Y18wIC8vIDAKICAgIGl0eG5fZmllbGQgRmVlCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMzgtMTQzCiAgICAvLyBpdHhuCiAgICAvLyAgIC5wYXltZW50KHsKICAgIC8vICAgICBjbG9zZVJlbWFpbmRlclRvOiB0aGlzLm1hbmFnZXIoKS5uYXRpdmUsCiAgICAvLyAgICAgbm90ZTogTk9URV9DTE9TRV9PVVRfUkVNQUlOREVSLAogICAgLy8gICB9KQogICAgLy8gICAuc3VibWl0KCkKICAgIGl0eG5fc3VibWl0CiAgICByZXRzdWIKCgovLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo6UmFuZG9tbmVzc0JlYWNvbi5jcmVhdGVSZXF1ZXN0KHJlcXVlc3RlckFkZHJlc3M6IGJ5dGVzLCByb3VuZDogYnl0ZXMsIGNvc3RzUGF5bWVudDogdWludDY0KSAtPiBieXRlczoKY3JlYXRlUmVxdWVzdDoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE1My0xNTcKICAgIC8vIHB1YmxpYyBjcmVhdGVSZXF1ZXN0KAogICAgLy8gICByZXF1ZXN0ZXJBZGRyZXNzOiBhcmM0LkFkZHJlc3MsCiAgICAvLyAgIHJvdW5kOiBhcmM0LlVpbnRONjQsCiAgICAvLyAgIGNvc3RzUGF5bWVudDogZ3R4bi5QYXltZW50VHhuLAogICAgLy8gKTogYXJjNC5VaW50TjY0IHsKICAgIHByb3RvIDMgMQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjEzCiAgICAvLyBwYXVzZWQgPSBHbG9iYWxTdGF0ZTxhcmM0LkJvb2w+KHsga2V5OiAncGF1c2VkJywgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5Cb29sKGZhbHNlKSB9KQogICAgaW50Y18wIC8vIDAKICAgIGJ5dGVjXzMgLy8gInBhdXNlZCIKICAgIGFwcF9nbG9iYWxfZ2V0X2V4CiAgICBhc3NlcnQgLy8gY2hlY2sgR2xvYmFsU3RhdGUgZXhpc3RzCiAgICBpbnRjXzAgLy8gMAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjE2CiAgICAvLyBhc3NlcnQoIXRoaXMucGF1c2VkLnZhbHVlLm5hdGl2ZSkKICAgIGdldGJpdAogICAgIQogICAgYXNzZXJ0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo3NwogICAgLy8gdG90YWxQZW5kaW5nUmVxdWVzdHMgPSBHbG9iYWxTdGF0ZTxhcmM0LlVpbnRONjQ+KHsga2V5OiAndG90YWxQZW5kaW5nUmVxdWVzdHMnLCBpbml0aWFsVmFsdWU6IG5ldyBhcmM0LlVpbnRONjQoMCkgfSkKICAgIGludGNfMCAvLyAwCiAgICBieXRlY18wIC8vICJ0b3RhbFBlbmRpbmdSZXF1ZXN0cyIKICAgIGFwcF9nbG9iYWxfZ2V0X2V4CiAgICBhc3NlcnQgLy8gY2hlY2sgR2xvYmFsU3RhdGUgZXhpc3RzCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNjEKICAgIC8vIGFzc2VydCh0aGlzLnRvdGFsUGVuZGluZ1JlcXVlc3RzLnZhbHVlLm5hdGl2ZSA8IHRoaXMubWF4UGVuZGluZ1JlcXVlc3RzLnZhbHVlLm5hdGl2ZSwgRVJSX01BWF9QRU5ESU5HX1JFUVVFU1RTKQogICAgYnRvaQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NjYKICAgIC8vIGtleTogJ21heFBlbmRpbmdSZXF1ZXN0cycsCiAgICBpbnRjXzAgLy8gMAogICAgYnl0ZWMgOCAvLyAibWF4UGVuZGluZ1JlcXVlc3RzIgogICAgYXBwX2dsb2JhbF9nZXRfZXgKICAgIGFzc2VydCAvLyBjaGVjayBHbG9iYWxTdGF0ZSBleGlzdHMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE2MQogICAgLy8gYXNzZXJ0KHRoaXMudG90YWxQZW5kaW5nUmVxdWVzdHMudmFsdWUubmF0aXZlIDwgdGhpcy5tYXhQZW5kaW5nUmVxdWVzdHMudmFsdWUubmF0aXZlLCBFUlJfTUFYX1BFTkRJTkdfUkVRVUVTVFMpCiAgICBidG9pCiAgICA8CiAgICBhc3NlcnQgLy8gY2Fubm90IGV4Y2VlZCBtYXggcGVuZGluZyByZXF1ZXN0cwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTYzCiAgICAvLyBhc3NlcnQocm91bmQubmF0aXZlID4gR2xvYmFsLnJvdW5kLCBFUlJfTVVTVF9CRV9GVVRVUkVfUk9VTkQpCiAgICBmcmFtZV9kaWcgLTIKICAgIGJ0b2kKICAgIGR1cAogICAgZ2xvYmFsIFJvdW5kCiAgICA+CiAgICBhc3NlcnQgLy8gbXVzdCBiZSBhIGZ1dHVyZSByb3VuZAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTY1CiAgICAvLyBhc3NlcnQocm91bmQubmF0aXZlIDw9IEdsb2JhbC5yb3VuZCArIHRoaXMubWF4RnV0dXJlUm91bmRzLnZhbHVlLm5hdGl2ZSwgJ2Vycm9yOiByb3VuZCBleGNlZWRzIG1heCBmdXR1cmUgcm91bmQnKQogICAgZ2xvYmFsIFJvdW5kCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo1OQogICAgLy8ga2V5OiAnbWF4RnV0dXJlUm91bmRzJywKICAgIGludGNfMCAvLyAwCiAgICBieXRlYyA5IC8vICJtYXhGdXR1cmVSb3VuZHMiCiAgICBhcHBfZ2xvYmFsX2dldF9leAogICAgYXNzZXJ0IC8vIGNoZWNrIEdsb2JhbFN0YXRlIGV4aXN0cwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTY1CiAgICAvLyBhc3NlcnQocm91bmQubmF0aXZlIDw9IEdsb2JhbC5yb3VuZCArIHRoaXMubWF4RnV0dXJlUm91bmRzLnZhbHVlLm5hdGl2ZSwgJ2Vycm9yOiByb3VuZCBleGNlZWRzIG1heCBmdXR1cmUgcm91bmQnKQogICAgYnRvaQogICAgKwogICAgPD0KICAgIGFzc2VydCAvLyBlcnJvcjogcm91bmQgZXhjZWVkcyBtYXggZnV0dXJlIHJvdW5kCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNjcKICAgIC8vIGNvbnN0IGNhbGxlckFwcElkID0gR2xvYmFsLmNhbGxlckFwcGxpY2F0aW9uSWQKICAgIGdsb2JhbCBDYWxsZXJBcHBsaWNhdGlvbklECiAgICBkdXAKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE2OQogICAgLy8gYXNzZXJ0KGNhbGxlckFwcElkICE9PSAwLCBFUlJfTVVTVF9CRV9DQUxMRURfRlJPTV9BUFApCiAgICBhc3NlcnQgLy8gbXVzdCBiZSBjYWxsZWQgYnkgYW4gYXBwbGljYXRpb24KICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE3MQogICAgLy8gY29uc3QgW3R4bkZlZXMsIGJveENvc3RdID0gdGhpcy5nZXRDb3N0cygpLm5hdGl2ZQogICAgY2FsbHN1YiBnZXRDb3N0cwogICAgZHVwCiAgICBleHRyYWN0IDggOCAvLyBvbiBlcnJvcjogSW5kZXggYWNjZXNzIGlzIG91dCBvZiBib3VuZHMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE3NC0xODQKICAgIC8vIGFzc2VydE1hdGNoKAogICAgLy8gICBjb3N0c1BheW1lbnQsCiAgICAvLyAgIHsKICAgIC8vICAgICByZWNlaXZlcjogR2xvYmFsLmN1cnJlbnRBcHBsaWNhdGlvbkFkZHJlc3MsCiAgICAvLyAgICAgYW1vdW50OiB7CiAgICAvLyAgICAgICAvLyBzaG91bGQgY292ZXIgdGhlIHJlcXVpcmVkIGZlZXMgKyBib3ggc3RvcmFnZSBjb3N0ICh3aWxsIGJlIHJlZnVuZGVkKQogICAgLy8gICAgICAgZ3JlYXRlclRoYW5FcTogdHhuRmVlcy5uYXRpdmUgKyBib3hDb3N0Lm5hdGl2ZSwKICAgIC8vICAgICB9LAogICAgLy8gICB9LAogICAgLy8gICBFUlJfQ09TVFNfUEFZTUVOVF9NVVNUX0JFX1ZBTElELAogICAgLy8gKQogICAgZnJhbWVfZGlnIC0xCiAgICBndHhucyBSZWNlaXZlcgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTc3CiAgICAvLyByZWNlaXZlcjogR2xvYmFsLmN1cnJlbnRBcHBsaWNhdGlvbkFkZHJlc3MsCiAgICBnbG9iYWwgQ3VycmVudEFwcGxpY2F0aW9uQWRkcmVzcwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTc0LTE4NAogICAgLy8gYXNzZXJ0TWF0Y2goCiAgICAvLyAgIGNvc3RzUGF5bWVudCwKICAgIC8vICAgewogICAgLy8gICAgIHJlY2VpdmVyOiBHbG9iYWwuY3VycmVudEFwcGxpY2F0aW9uQWRkcmVzcywKICAgIC8vICAgICBhbW91bnQ6IHsKICAgIC8vICAgICAgIC8vIHNob3VsZCBjb3ZlciB0aGUgcmVxdWlyZWQgZmVlcyArIGJveCBzdG9yYWdlIGNvc3QgKHdpbGwgYmUgcmVmdW5kZWQpCiAgICAvLyAgICAgICBncmVhdGVyVGhhbkVxOiB0eG5GZWVzLm5hdGl2ZSArIGJveENvc3QubmF0aXZlLAogICAgLy8gICAgIH0sCiAgICAvLyAgIH0sCiAgICAvLyAgIEVSUl9DT1NUU19QQVlNRU5UX01VU1RfQkVfVkFMSUQsCiAgICAvLyApCiAgICA9PQogICAgYnogY3JlYXRlUmVxdWVzdF9ib29sX2ZhbHNlQDMKICAgIGZyYW1lX2RpZyAtMQogICAgZ3R4bnMgQW1vdW50CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxODAKICAgIC8vIGdyZWF0ZXJUaGFuRXE6IHR4bkZlZXMubmF0aXZlICsgYm94Q29zdC5uYXRpdmUsCiAgICBmcmFtZV9kaWcgMQogICAgZHVwCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNzEKICAgIC8vIGNvbnN0IFt0eG5GZWVzLCBib3hDb3N0XSA9IHRoaXMuZ2V0Q29zdHMoKS5uYXRpdmUKICAgIGludGNfMCAvLyAwCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxODAKICAgIC8vIGdyZWF0ZXJUaGFuRXE6IHR4bkZlZXMubmF0aXZlICsgYm94Q29zdC5uYXRpdmUsCiAgICBleHRyYWN0X3VpbnQ2NAogICAgc3dhcAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTcxCiAgICAvLyBjb25zdCBbdHhuRmVlcywgYm94Q29zdF0gPSB0aGlzLmdldENvc3RzKCkubmF0aXZlCiAgICBpbnRjXzIgLy8gOAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTgwCiAgICAvLyBncmVhdGVyVGhhbkVxOiB0eG5GZWVzLm5hdGl2ZSArIGJveENvc3QubmF0aXZlLAogICAgZXh0cmFjdF91aW50NjQKICAgICsKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE3NC0xODQKICAgIC8vIGFzc2VydE1hdGNoKAogICAgLy8gICBjb3N0c1BheW1lbnQsCiAgICAvLyAgIHsKICAgIC8vICAgICByZWNlaXZlcjogR2xvYmFsLmN1cnJlbnRBcHBsaWNhdGlvbkFkZHJlc3MsCiAgICAvLyAgICAgYW1vdW50OiB7CiAgICAvLyAgICAgICAvLyBzaG91bGQgY292ZXIgdGhlIHJlcXVpcmVkIGZlZXMgKyBib3ggc3RvcmFnZSBjb3N0ICh3aWxsIGJlIHJlZnVuZGVkKQogICAgLy8gICAgICAgZ3JlYXRlclRoYW5FcTogdHhuRmVlcy5uYXRpdmUgKyBib3hDb3N0Lm5hdGl2ZSwKICAgIC8vICAgICB9LAogICAgLy8gICB9LAogICAgLy8gICBFUlJfQ09TVFNfUEFZTUVOVF9NVVNUX0JFX1ZBTElELAogICAgLy8gKQogICAgPj0KICAgIGJ6IGNyZWF0ZVJlcXVlc3RfYm9vbF9mYWxzZUAzCiAgICBpbnRjXzEgLy8gMQoKY3JlYXRlUmVxdWVzdF9ib29sX21lcmdlQDQ6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNzQtMTg0CiAgICAvLyBhc3NlcnRNYXRjaCgKICAgIC8vICAgY29zdHNQYXltZW50LAogICAgLy8gICB7CiAgICAvLyAgICAgcmVjZWl2ZXI6IEdsb2JhbC5jdXJyZW50QXBwbGljYXRpb25BZGRyZXNzLAogICAgLy8gICAgIGFtb3VudDogewogICAgLy8gICAgICAgLy8gc2hvdWxkIGNvdmVyIHRoZSByZXF1aXJlZCBmZWVzICsgYm94IHN0b3JhZ2UgY29zdCAod2lsbCBiZSByZWZ1bmRlZCkKICAgIC8vICAgICAgIGdyZWF0ZXJUaGFuRXE6IHR4bkZlZXMubmF0aXZlICsgYm94Q29zdC5uYXRpdmUsCiAgICAvLyAgICAgfSwKICAgIC8vICAgfSwKICAgIC8vICAgRVJSX0NPU1RTX1BBWU1FTlRfTVVTVF9CRV9WQUxJRCwKICAgIC8vICkKICAgIGFzc2VydCAvLyBjb3N0cyBwYXltZW50IG11c3QgYmUgdmFsaWQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjE4NwogICAgLy8gY29uc3QgZmVlc1BhaWQ6IHVpbnQ2NCA9IGNvc3RzUGF5bWVudC5hbW91bnQgLSBib3hDb3N0Lm5hdGl2ZQogICAgZnJhbWVfZGlnIC0xCiAgICBndHhucyBBbW91bnQKICAgIGZyYW1lX2RpZyAxCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxNzEKICAgIC8vIGNvbnN0IFt0eG5GZWVzLCBib3hDb3N0XSA9IHRoaXMuZ2V0Q29zdHMoKS5uYXRpdmUKICAgIGludGNfMiAvLyA4CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxODcKICAgIC8vIGNvbnN0IGZlZXNQYWlkOiB1aW50NjQgPSBjb3N0c1BheW1lbnQuYW1vdW50IC0gYm94Q29zdC5uYXRpdmUKICAgIGV4dHJhY3RfdWludDY0CiAgICAtCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxOTAKICAgIC8vIGNyZWF0ZWRBdDogbmV3IGFyYzQuVWludE42NChHbG9iYWwucm91bmQpLAogICAgZ2xvYmFsIFJvdW5kCiAgICBpdG9iCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxOTEKICAgIC8vIHJlcXVlc3RlckFwcElkOiBuZXcgYXJjNC5VaW50TjY0KGNhbGxlckFwcElkKSwKICAgIGZyYW1lX2RpZyAwCiAgICBpdG9iCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxOTQKICAgIC8vIGZlZVBhaWQ6IG5ldyBhcmM0LlVpbnRONjQoZmVlc1BhaWQpLAogICAgdW5jb3ZlciAyCiAgICBpdG9iCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxODktMTk2CiAgICAvLyBjb25zdCByZXF1ZXN0ID0gbmV3IFJhbmRvbW5lc3NSZXF1ZXN0KHsKICAgIC8vICAgY3JlYXRlZEF0OiBuZXcgYXJjNC5VaW50TjY0KEdsb2JhbC5yb3VuZCksCiAgICAvLyAgIHJlcXVlc3RlckFwcElkOiBuZXcgYXJjNC5VaW50TjY0KGNhbGxlckFwcElkKSwKICAgIC8vICAgcmVxdWVzdGVyQWRkcmVzczogcmVxdWVzdGVyQWRkcmVzcywKICAgIC8vICAgcm91bmQ6IHJvdW5kLAogICAgLy8gICBmZWVQYWlkOiBuZXcgYXJjNC5VaW50TjY0KGZlZXNQYWlkKSwKICAgIC8vICAgYm94Q29zdDogYm94Q29zdCwKICAgIC8vIH0pCiAgICB1bmNvdmVyIDIKICAgIGRpZyAyCiAgICBjb25jYXQKICAgIGZyYW1lX2RpZyAtMwogICAgY29uY2F0CiAgICBmcmFtZV9kaWcgLTIKICAgIGNvbmNhdAogICAgc3dhcAogICAgY29uY2F0CiAgICBmcmFtZV9kaWcgMgogICAgY29uY2F0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo1MAogICAgLy8gbmV4dFJlcXVlc3RJZCA9IEdsb2JhbFN0YXRlPGFyYzQuVWludE42ND4oeyBrZXk6ICduZXh0UmVxdWVzdElkJywgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5VaW50TjY0KDEpIH0pCiAgICBpbnRjXzAgLy8gMAogICAgYnl0ZWMgNiAvLyAibmV4dFJlcXVlc3RJZCIKICAgIGFwcF9nbG9iYWxfZ2V0X2V4CiAgICBhc3NlcnQgLy8gY2hlY2sgR2xvYmFsU3RhdGUgZXhpc3RzCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoxMDAKICAgIC8vIHRoaXMubmV4dFJlcXVlc3RJZC52YWx1ZSA9IG5ldyBhcmM0LlVpbnRONjQocmVxdWVzdElkLm5hdGl2ZSArIDEpCiAgICBkdXAKICAgIGJ0b2kKICAgIGludGNfMSAvLyAxCiAgICArCiAgICBpdG9iCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo1MAogICAgLy8gbmV4dFJlcXVlc3RJZCA9IEdsb2JhbFN0YXRlPGFyYzQuVWludE42ND4oeyBrZXk6ICduZXh0UmVxdWVzdElkJywgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5VaW50TjY0KDEpIH0pCiAgICBieXRlYyA2IC8vICJuZXh0UmVxdWVzdElkIgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MTAwCiAgICAvLyB0aGlzLm5leHRSZXF1ZXN0SWQudmFsdWUgPSBuZXcgYXJjNC5VaW50TjY0KHJlcXVlc3RJZC5uYXRpdmUgKyAxKQogICAgc3dhcAogICAgYXBwX2dsb2JhbF9wdXQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjUzCiAgICAvLyByZXF1ZXN0cyA9IEJveE1hcDxhcmM0LlVpbnRONjQsIFJhbmRvbW5lc3NSZXF1ZXN0Pih7IGtleVByZWZpeDogJ3JlcXVlc3RzJyB9KQogICAgYnl0ZWMgNSAvLyAicmVxdWVzdHMiCiAgICBkaWcgMQogICAgY29uY2F0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyMDEKICAgIC8vIHRoaXMucmVxdWVzdHMocmVxdWVzdElkKS52YWx1ZSA9IHJlcXVlc3QuY29weSgpCiAgICB1bmNvdmVyIDIKICAgIGJveF9wdXQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjc3CiAgICAvLyB0b3RhbFBlbmRpbmdSZXF1ZXN0cyA9IEdsb2JhbFN0YXRlPGFyYzQuVWludE42ND4oeyBrZXk6ICd0b3RhbFBlbmRpbmdSZXF1ZXN0cycsIGluaXRpYWxWYWx1ZTogbmV3IGFyYzQuVWludE42NCgwKSB9KQogICAgaW50Y18wIC8vIDAKICAgIGJ5dGVjXzAgLy8gInRvdGFsUGVuZGluZ1JlcXVlc3RzIgogICAgYXBwX2dsb2JhbF9nZXRfZXgKICAgIGFzc2VydCAvLyBjaGVjayBHbG9iYWxTdGF0ZSBleGlzdHMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjIwMwogICAgLy8gdGhpcy50b3RhbFBlbmRpbmdSZXF1ZXN0cy52YWx1ZSA9IG5ldyBhcmM0LlVpbnRONjQodGhpcy50b3RhbFBlbmRpbmdSZXF1ZXN0cy52YWx1ZS5uYXRpdmUgKyAxKQogICAgYnRvaQogICAgaW50Y18xIC8vIDEKICAgICsKICAgIGl0b2IKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjc3CiAgICAvLyB0b3RhbFBlbmRpbmdSZXF1ZXN0cyA9IEdsb2JhbFN0YXRlPGFyYzQuVWludE42ND4oeyBrZXk6ICd0b3RhbFBlbmRpbmdSZXF1ZXN0cycsIGluaXRpYWxWYWx1ZTogbmV3IGFyYzQuVWludE42NCgwKSB9KQogICAgYnl0ZWNfMCAvLyAidG90YWxQZW5kaW5nUmVxdWVzdHMiCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyMDMKICAgIC8vIHRoaXMudG90YWxQZW5kaW5nUmVxdWVzdHMudmFsdWUgPSBuZXcgYXJjNC5VaW50TjY0KHRoaXMudG90YWxQZW5kaW5nUmVxdWVzdHMudmFsdWUubmF0aXZlICsgMSkKICAgIHN3YXAKICAgIGFwcF9nbG9iYWxfcHV0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyMDctMjEyCiAgICAvLyBuZXcgUmVxdWVzdENyZWF0ZWQoewogICAgLy8gICByZXF1ZXN0SWQ6IHJlcXVlc3RJZCwKICAgIC8vICAgcmVxdWVzdGVyQXBwSWQ6IG5ldyBhcmM0LlVpbnRONjQoY2FsbGVyQXBwSWQpLAogICAgLy8gICByZXF1ZXN0ZXJBZGRyZXNzOiByZXF1ZXN0ZXJBZGRyZXNzLAogICAgLy8gICByb3VuZDogcm91bmQsCiAgICAvLyB9KSwKICAgIGR1cAogICAgdW5jb3ZlciAyCiAgICBjb25jYXQKICAgIGZyYW1lX2RpZyAtMwogICAgY29uY2F0CiAgICBmcmFtZV9kaWcgLTIKICAgIGNvbmNhdAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjA2LTIxMwogICAgLy8gZW1pdCgKICAgIC8vICAgbmV3IFJlcXVlc3RDcmVhdGVkKHsKICAgIC8vICAgICByZXF1ZXN0SWQ6IHJlcXVlc3RJZCwKICAgIC8vICAgICByZXF1ZXN0ZXJBcHBJZDogbmV3IGFyYzQuVWludE42NChjYWxsZXJBcHBJZCksCiAgICAvLyAgICAgcmVxdWVzdGVyQWRkcmVzczogcmVxdWVzdGVyQWRkcmVzcywKICAgIC8vICAgICByb3VuZDogcm91bmQsCiAgICAvLyAgIH0pLAogICAgLy8gKQogICAgcHVzaGJ5dGVzIDB4ZDA2YjU2ZTYgLy8gbWV0aG9kICJSZXF1ZXN0Q3JlYXRlZCh1aW50NjQsdWludDY0LGFkZHJlc3MsdWludDY0KSIKICAgIHN3YXAKICAgIGNvbmNhdAogICAgbG9nCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyMTUKICAgIC8vIHJldHVybiByZXF1ZXN0SWQKICAgIGZyYW1lX2J1cnkgMAogICAgcmV0c3ViCgpjcmVhdGVSZXF1ZXN0X2Jvb2xfZmFsc2VAMzoKICAgIGludGNfMCAvLyAwCiAgICBiIGNyZWF0ZVJlcXVlc3RfYm9vbF9tZXJnZUA0CgoKLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6OlJhbmRvbW5lc3NCZWFjb24uY2FuY2VsUmVxdWVzdChyZXF1ZXN0SWQ6IGJ5dGVzKSAtPiB2b2lkOgpjYW5jZWxSZXF1ZXN0OgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjE4CiAgICAvLyBwdWJsaWMgY2FuY2VsUmVxdWVzdChyZXF1ZXN0SWQ6IGFyYzQuVWludE42NCk6IHZvaWQgewogICAgcHJvdG8gMSAwCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo1MwogICAgLy8gcmVxdWVzdHMgPSBCb3hNYXA8YXJjNC5VaW50TjY0LCBSYW5kb21uZXNzUmVxdWVzdD4oeyBrZXlQcmVmaXg6ICdyZXF1ZXN0cycgfSkKICAgIGJ5dGVjIDUgLy8gInJlcXVlc3RzIgogICAgZnJhbWVfZGlnIC0xCiAgICBjb25jYXQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjIyMAogICAgLy8gY29uc3QgcmVxdWVzdDogUmFuZG9tbmVzc1JlcXVlc3QgPSB0aGlzLnJlcXVlc3RzKHJlcXVlc3RJZCkudmFsdWUuY29weSgpCiAgICBib3hfZ2V0CiAgICBzd2FwCiAgICBkdXAKICAgIHVuY292ZXIgMgogICAgYXNzZXJ0IC8vIEJveCBtdXN0IGhhdmUgdmFsdWUKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjIyMwogICAgLy8gR2xvYmFsLnJvdW5kID49IHJlcXVlc3Qucm91bmQubmF0aXZlICsgdGhpcy5zdGFsZVJlcXVlc3RUaW1lb3V0LnZhbHVlLm5hdGl2ZSwKICAgIGdsb2JhbCBSb3VuZAogICAgZGlnIDEKICAgIHB1c2hpbnQgNDggLy8gNDgKICAgIGV4dHJhY3RfdWludDY0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czo3MwogICAgLy8ga2V5OiAnc3RhbGVSZXF1ZXN0VGltZW91dCcsCiAgICBpbnRjXzAgLy8gMAogICAgYnl0ZWMgMTAgLy8gInN0YWxlUmVxdWVzdFRpbWVvdXQiCiAgICBhcHBfZ2xvYmFsX2dldF9leAogICAgYXNzZXJ0IC8vIGNoZWNrIEdsb2JhbFN0YXRlIGV4aXN0cwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjIzCiAgICAvLyBHbG9iYWwucm91bmQgPj0gcmVxdWVzdC5yb3VuZC5uYXRpdmUgKyB0aGlzLnN0YWxlUmVxdWVzdFRpbWVvdXQudmFsdWUubmF0aXZlLAogICAgYnRvaQogICAgKwogICAgPj0KICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjIyMi0yMjUKICAgIC8vIGFzc2VydCgKICAgIC8vICAgR2xvYmFsLnJvdW5kID49IHJlcXVlc3Qucm91bmQubmF0aXZlICsgdGhpcy5zdGFsZVJlcXVlc3RUaW1lb3V0LnZhbHVlLm5hdGl2ZSwKICAgIC8vICAgJ3JlcXVlc3QgbXVzdCBiZSBzdGFsZSB0byBjYW5jZWwnLAogICAgLy8gKQogICAgYXNzZXJ0IC8vIHJlcXVlc3QgbXVzdCBiZSBzdGFsZSB0byBjYW5jZWwKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjIyNwogICAgLy8gbGV0IGFtb3VudFRvUmVmdW5kOiB1aW50NjQgPSByZXF1ZXN0LmJveENvc3QubmF0aXZlICsgcmVxdWVzdC5mZWVQYWlkLm5hdGl2ZQogICAgZHVwCiAgICBpbnRjXzMgLy8gNjQKICAgIGV4dHJhY3RfdWludDY0CiAgICBkaWcgMQogICAgcHVzaGludCA1NiAvLyA1NgogICAgZXh0cmFjdF91aW50NjQKICAgICsKICAgIGR1cAogICAgdW5jb3ZlciAyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyMzAKICAgIC8vIGlmIChyZXF1ZXN0LnJlcXVlc3RlckFkZHJlc3MubmF0aXZlICE9PSBUeG4uc2VuZGVyKSB7CiAgICBleHRyYWN0IDE2IDMyIC8vIG9uIGVycm9yOiBJbmRleCBhY2Nlc3MgaXMgb3V0IG9mIGJvdW5kcwogICAgZHVwCiAgICBjb3ZlciAyCiAgICB0eG4gU2VuZGVyCiAgICAhPQogICAgYnogY2FuY2VsUmVxdWVzdF9hZnRlcl9pZl9lbHNlQDMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjIzNgogICAgLy8gY29uc3QgY2FuY2VsbGF0aW9uRmVlczogdWludDY0ID0gR2xvYmFsLm1pblR4bkZlZSAqIDMKICAgIGdsb2JhbCBNaW5UeG5GZWUKICAgIHB1c2hpbnQgMyAvLyAzCiAgICAqCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyMzkKICAgIC8vIGFtb3VudFRvUmVmdW5kIC09IGNhbmNlbGxhdGlvbkZlZXMKICAgIGZyYW1lX2RpZyAxCiAgICBkaWcgMQogICAgLQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjQyLTI0OQogICAgLy8gaXR4bgogICAgLy8gICAucGF5bWVudCh7CiAgICAvLyAgICAgcmVjZWl2ZXI6IFR4bi5zZW5kZXIsCiAgICAvLyAgICAgYW1vdW50OiBjYW5jZWxsYXRpb25GZWVzLAogICAgLy8gICAgIG5vdGU6IE5PVEVfQ0FOQ0VMX1BBWU1FTlQsCiAgICAvLyAgICAgZmVlOiAwLAogICAgLy8gICB9KQogICAgLy8gICAuc3VibWl0KCkKICAgIGl0eG5fYmVnaW4KICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI0NAogICAgLy8gcmVjZWl2ZXI6IFR4bi5zZW5kZXIsCiAgICB0eG4gU2VuZGVyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vdHlwZXMuYWxnby50czoxNgogICAgLy8gZXhwb3J0IGNvbnN0IE5PVEVfQ0FOQ0VMX1BBWU1FTlQgPSAnY2FuY2VsbGF0aW9uIGZlZXMgZm9yIGNhbGxlcicKICAgIHB1c2hieXRlcyAiY2FuY2VsbGF0aW9uIGZlZXMgZm9yIGNhbGxlciIKICAgIGl0eG5fZmllbGQgTm90ZQogICAgdW5jb3ZlciAyCiAgICBpdHhuX2ZpZWxkIEFtb3VudAogICAgaXR4bl9maWVsZCBSZWNlaXZlcgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjQyLTI0OAogICAgLy8gaXR4bgogICAgLy8gICAucGF5bWVudCh7CiAgICAvLyAgICAgcmVjZWl2ZXI6IFR4bi5zZW5kZXIsCiAgICAvLyAgICAgYW1vdW50OiBjYW5jZWxsYXRpb25GZWVzLAogICAgLy8gICAgIG5vdGU6IE5PVEVfQ0FOQ0VMX1BBWU1FTlQsCiAgICAvLyAgICAgZmVlOiAwLAogICAgLy8gICB9KQogICAgaW50Y18xIC8vIDEKICAgIGl0eG5fZmllbGQgVHlwZUVudW0KICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI0NwogICAgLy8gZmVlOiAwLAogICAgaW50Y18wIC8vIDAKICAgIGl0eG5fZmllbGQgRmVlCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyNDItMjQ5CiAgICAvLyBpdHhuCiAgICAvLyAgIC5wYXltZW50KHsKICAgIC8vICAgICByZWNlaXZlcjogVHhuLnNlbmRlciwKICAgIC8vICAgICBhbW91bnQ6IGNhbmNlbGxhdGlvbkZlZXMsCiAgICAvLyAgICAgbm90ZTogTk9URV9DQU5DRUxfUEFZTUVOVCwKICAgIC8vICAgICBmZWU6IDAsCiAgICAvLyAgIH0pCiAgICAvLyAgIC5zdWJtaXQoKQogICAgaXR4bl9zdWJtaXQKICAgIGZyYW1lX2J1cnkgMwoKY2FuY2VsUmVxdWVzdF9hZnRlcl9pZl9lbHNlQDM6CiAgICBmcmFtZV9kaWcgMwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjUzLTI2MAogICAgLy8gaXR4bgogICAgLy8gICAucGF5bWVudCh7CiAgICAvLyAgICAgcmVjZWl2ZXI6IHJlcXVlc3QucmVxdWVzdGVyQWRkcmVzcy5uYXRpdmUsCiAgICAvLyAgICAgYW1vdW50OiBhbW91bnRUb1JlZnVuZCwKICAgIC8vICAgICBub3RlOiBOT1RFX0JPWF9NQlJfUkVGVU5ELCAvLyBUT0RPOiBtYWtlIGEgbmV3IG5vdGUgdGhhdCBleHBsYWlucyB0aGlzIGJldHRlcgogICAgLy8gICAgIGZlZTogMCwgLy8gZm9yY2UgZ3JvdXAgdG8gY292ZXIgaXQKICAgIC8vICAgfSkKICAgIC8vICAgLnN1Ym1pdCgpCiAgICBpdHhuX2JlZ2luCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vdHlwZXMuYWxnby50czoxNAogICAgLy8gZXhwb3J0IGNvbnN0IE5PVEVfQk9YX01CUl9SRUZVTkQgPSAnYm94IG1iciByZWZ1bmQnCiAgICBieXRlYyAxMSAvLyAiYm94IG1iciByZWZ1bmQiCiAgICBpdHhuX2ZpZWxkIE5vdGUKICAgIGl0eG5fZmllbGQgQW1vdW50CiAgICBmcmFtZV9kaWcgMgogICAgZHVwCiAgICBpdHhuX2ZpZWxkIFJlY2VpdmVyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyNTMtMjU5CiAgICAvLyBpdHhuCiAgICAvLyAgIC5wYXltZW50KHsKICAgIC8vICAgICByZWNlaXZlcjogcmVxdWVzdC5yZXF1ZXN0ZXJBZGRyZXNzLm5hdGl2ZSwKICAgIC8vICAgICBhbW91bnQ6IGFtb3VudFRvUmVmdW5kLAogICAgLy8gICAgIG5vdGU6IE5PVEVfQk9YX01CUl9SRUZVTkQsIC8vIFRPRE86IG1ha2UgYSBuZXcgbm90ZSB0aGF0IGV4cGxhaW5zIHRoaXMgYmV0dGVyCiAgICAvLyAgICAgZmVlOiAwLCAvLyBmb3JjZSBncm91cCB0byBjb3ZlciBpdAogICAgLy8gICB9KQogICAgaW50Y18xIC8vIDEKICAgIGl0eG5fZmllbGQgVHlwZUVudW0KICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI1OAogICAgLy8gZmVlOiAwLCAvLyBmb3JjZSBncm91cCB0byBjb3ZlciBpdAogICAgaW50Y18wIC8vIDAKICAgIGl0eG5fZmllbGQgRmVlCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyNTMtMjYwCiAgICAvLyBpdHhuCiAgICAvLyAgIC5wYXltZW50KHsKICAgIC8vICAgICByZWNlaXZlcjogcmVxdWVzdC5yZXF1ZXN0ZXJBZGRyZXNzLm5hdGl2ZSwKICAgIC8vICAgICBhbW91bnQ6IGFtb3VudFRvUmVmdW5kLAogICAgLy8gICAgIG5vdGU6IE5PVEVfQk9YX01CUl9SRUZVTkQsIC8vIFRPRE86IG1ha2UgYSBuZXcgbm90ZSB0aGF0IGV4cGxhaW5zIHRoaXMgYmV0dGVyCiAgICAvLyAgICAgZmVlOiAwLCAvLyBmb3JjZSBncm91cCB0byBjb3ZlciBpdAogICAgLy8gICB9KQogICAgLy8gICAuc3VibWl0KCkKICAgIGl0eG5fc3VibWl0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyNjYKICAgIC8vIHJlcXVlc3RlckFwcElkOiByZXF1ZXN0LnJlcXVlc3RlckFwcElkLAogICAgZnJhbWVfZGlnIDAKICAgIGV4dHJhY3QgOCA4IC8vIG9uIGVycm9yOiBJbmRleCBhY2Nlc3MgaXMgb3V0IG9mIGJvdW5kcwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjY0LTI2OAogICAgLy8gbmV3IFJlcXVlc3RDYW5jZWxsZWQoewogICAgLy8gICByZXF1ZXN0SWQ6IHJlcXVlc3RJZCwKICAgIC8vICAgcmVxdWVzdGVyQXBwSWQ6IHJlcXVlc3QucmVxdWVzdGVyQXBwSWQsCiAgICAvLyAgIHJlcXVlc3RlckFkZHJlc3M6IHJlcXVlc3QucmVxdWVzdGVyQWRkcmVzcywKICAgIC8vIH0pLAogICAgZnJhbWVfZGlnIC0xCiAgICBzd2FwCiAgICBjb25jYXQKICAgIHN3YXAKICAgIGNvbmNhdAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjYzLTI2OQogICAgLy8gZW1pdCgKICAgIC8vICAgbmV3IFJlcXVlc3RDYW5jZWxsZWQoewogICAgLy8gICAgIHJlcXVlc3RJZDogcmVxdWVzdElkLAogICAgLy8gICAgIHJlcXVlc3RlckFwcElkOiByZXF1ZXN0LnJlcXVlc3RlckFwcElkLAogICAgLy8gICAgIHJlcXVlc3RlckFkZHJlc3M6IHJlcXVlc3QucmVxdWVzdGVyQWRkcmVzcywKICAgIC8vICAgfSksCiAgICAvLyApCiAgICBwdXNoYnl0ZXMgMHhjNTFjZjY3ZCAvLyBtZXRob2QgIlJlcXVlc3RDYW5jZWxsZWQodWludDY0LHVpbnQ2NCxhZGRyZXNzKSIKICAgIHN3YXAKICAgIGNvbmNhdAogICAgbG9nCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyNzEKICAgIC8vIHRoaXMuZGVsZXRlUmVxdWVzdChyZXF1ZXN0SWQpCiAgICBmcmFtZV9kaWcgLTEKICAgIGNhbGxzdWIgZGVsZXRlUmVxdWVzdAogICAgcmV0c3ViCgoKLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6OlJhbmRvbW5lc3NCZWFjb24uY29tcGxldGVSZXF1ZXN0KHJlcXVlc3RJZDogYnl0ZXMsIHByb29mOiBieXRlcykgLT4gdm9pZDoKY29tcGxldGVSZXF1ZXN0OgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6Mjc5CiAgICAvLyBwdWJsaWMgY29tcGxldGVSZXF1ZXN0KHJlcXVlc3RJZDogYXJjNC5VaW50TjY0LCBwcm9vZjogYXJjNC5TdGF0aWNCeXRlczw4MD4pOiB2b2lkIHsKICAgIHByb3RvIDIgMAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjgxCiAgICAvLyB0aGlzLm9ubHlNYW5hZ2VyKCkKICAgIGNhbGxzdWIgb25seU1hbmFnZXIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjUzCiAgICAvLyByZXF1ZXN0cyA9IEJveE1hcDxhcmM0LlVpbnRONjQsIFJhbmRvbW5lc3NSZXF1ZXN0Pih7IGtleVByZWZpeDogJ3JlcXVlc3RzJyB9KQogICAgYnl0ZWMgNSAvLyAicmVxdWVzdHMiCiAgICBmcmFtZV9kaWcgLTIKICAgIGNvbmNhdAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjgzCiAgICAvLyBjb25zdCByZXF1ZXN0OiBSYW5kb21uZXNzUmVxdWVzdCA9IHRoaXMucmVxdWVzdHMocmVxdWVzdElkKS52YWx1ZS5jb3B5KCkKICAgIGJveF9nZXQKICAgIHN3YXAKICAgIGR1cAogICAgdW5jb3ZlciAyCiAgICBhc3NlcnQgLy8gQm94IG11c3QgaGF2ZSB2YWx1ZQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6Mjg1CiAgICAvLyBjb25zdCBibG9ja1NlZWQgPSBvcC5CbG9jay5ibGtTZWVkKHJlcXVlc3Qucm91bmQubmF0aXZlKQogICAgcHVzaGludCA0OCAvLyA0OAogICAgZXh0cmFjdF91aW50NjQKICAgIGJsb2NrIEJsa1NlZWQKCmNvbXBsZXRlUmVxdWVzdF93aGlsZV90b3BANToKICAgIHB1c2hpbnQgNTcxMCAvLyA1NzEwCiAgICBnbG9iYWwgT3Bjb2RlQnVkZ2V0CiAgICA+CiAgICBieiBjb21wbGV0ZVJlcXVlc3RfYWZ0ZXJfd2hpbGVAMTAKICAgIGl0eG5fYmVnaW4KICAgIHB1c2hpbnQgNiAvLyBhcHBsCiAgICBpdHhuX2ZpZWxkIFR5cGVFbnVtCiAgICBwdXNoaW50IDUgLy8gRGVsZXRlQXBwbGljYXRpb24KICAgIGl0eG5fZmllbGQgT25Db21wbGV0aW9uCiAgICBieXRlYyAxMiAvLyAweDA2ODEwMQogICAgaXR4bl9maWVsZCBBcHByb3ZhbFByb2dyYW0KICAgIGJ5dGVjIDEyIC8vIDB4MDY4MTAxCiAgICBpdHhuX2ZpZWxkIENsZWFyU3RhdGVQcm9ncmFtCiAgICBpbnRjXzAgLy8gMAogICAgaXR4bl9maWVsZCBGZWUKICAgIGl0eG5fc3VibWl0CiAgICBiIGNvbXBsZXRlUmVxdWVzdF93aGlsZV90b3BANQoKY29tcGxldGVSZXF1ZXN0X2FmdGVyX3doaWxlQDEwOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6NDcKICAgIC8vIHB1YmxpY0tleSA9IEdsb2JhbFN0YXRlPGFyYzQuU3RhdGljQnl0ZXM8MzI+Pih7IGtleTogJ3B1YmxpY0tleScgfSkKICAgIGludGNfMCAvLyAwCiAgICBieXRlYyA3IC8vICJwdWJsaWNLZXkiCiAgICBhcHBfZ2xvYmFsX2dldF9leAogICAgYXNzZXJ0IC8vIGNoZWNrIEdsb2JhbFN0YXRlIGV4aXN0cwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6Mjg5CiAgICAvLyBjb25zdCBbb3V0cHV0LCB2ZXJpZmllZF0gPSBvcC52cmZWZXJpZnkoVnJmVmVyaWZ5LlZyZkFsZ29yYW5kLCBibG9ja1NlZWQsIHByb29mLmJ5dGVzLCB0aGlzLnB1YmxpY0tleS52YWx1ZS5ieXRlcykKICAgIGZyYW1lX2RpZyAxCiAgICBmcmFtZV9kaWcgLTEKICAgIHVuY292ZXIgMgogICAgdnJmX3ZlcmlmeSBWcmZBbGdvcmFuZAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MjkxCiAgICAvLyBhc3NlcnQodmVyaWZpZWQsIEVSUl9QUk9PRl9NVVNUX0JFX1ZBTElEKQogICAgYXNzZXJ0IC8vIHByb29mIG11c3QgYmUgdmFsaWQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjI5NC0yOTgKICAgIC8vIGNvbnN0IHIgPSBhcmM0LmFiaUNhbGwoUmFuZG9tbmVzc0JlYWNvbkNhbGxlclN0dWIucHJvdG90eXBlLmZ1bGZpbGxSYW5kb21uZXNzLCB7CiAgICAvLyAgIGFwcElkOiByZXF1ZXN0LnJlcXVlc3RlckFwcElkLm5hdGl2ZSwKICAgIC8vICAgYXJnczogW3JlcXVlc3RJZCwgcmVxdWVzdC5yZXF1ZXN0ZXJBZGRyZXNzLCBuZXcgYXJjNC5TdGF0aWNCeXRlczw2ND4ob3V0cHV0KV0sCiAgICAvLyAgIGZlZTogMCwKICAgIC8vIH0pCiAgICBpdHhuX2JlZ2luCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyOTUKICAgIC8vIGFwcElkOiByZXF1ZXN0LnJlcXVlc3RlckFwcElkLm5hdGl2ZSwKICAgIGZyYW1lX2RpZyAwCiAgICBkdXAKICAgIGV4dHJhY3QgOCA4IC8vIG9uIGVycm9yOiBJbmRleCBhY2Nlc3MgaXMgb3V0IG9mIGJvdW5kcwogICAgZGlnIDEKICAgIGludGNfMiAvLyA4CiAgICBleHRyYWN0X3VpbnQ2NAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6Mjk2CiAgICAvLyBhcmdzOiBbcmVxdWVzdElkLCByZXF1ZXN0LnJlcXVlc3RlckFkZHJlc3MsIG5ldyBhcmM0LlN0YXRpY0J5dGVzPDY0PihvdXRwdXQpXSwKICAgIGRpZyAyCiAgICBleHRyYWN0IDE2IDMyIC8vIG9uIGVycm9yOiBJbmRleCBhY2Nlc3MgaXMgb3V0IG9mIGJvdW5kcwogICAgZGlnIDQKICAgIGxlbgogICAgaW50Y18zIC8vIDY0CiAgICA9PQogICAgYXNzZXJ0IC8vIGludmFsaWQgc2l6ZQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6Mjk0LTI5OAogICAgLy8gY29uc3QgciA9IGFyYzQuYWJpQ2FsbChSYW5kb21uZXNzQmVhY29uQ2FsbGVyU3R1Yi5wcm90b3R5cGUuZnVsZmlsbFJhbmRvbW5lc3MsIHsKICAgIC8vICAgYXBwSWQ6IHJlcXVlc3QucmVxdWVzdGVyQXBwSWQubmF0aXZlLAogICAgLy8gICBhcmdzOiBbcmVxdWVzdElkLCByZXF1ZXN0LnJlcXVlc3RlckFkZHJlc3MsIG5ldyBhcmM0LlN0YXRpY0J5dGVzPDY0PihvdXRwdXQpXSwKICAgIC8vICAgZmVlOiAwLAogICAgLy8gfSkKICAgIHB1c2hieXRlcyAweDQyY2JmZTRjIC8vIG1ldGhvZCAiZnVsZmlsbFJhbmRvbW5lc3ModWludDY0LGFkZHJlc3MsYnl0ZVs2NF0pdm9pZCIKICAgIGl0eG5fZmllbGQgQXBwbGljYXRpb25BcmdzCiAgICBmcmFtZV9kaWcgLTIKICAgIGl0eG5fZmllbGQgQXBwbGljYXRpb25BcmdzCiAgICBkdXAKICAgIGl0eG5fZmllbGQgQXBwbGljYXRpb25BcmdzCiAgICB1bmNvdmVyIDQKICAgIGl0eG5fZmllbGQgQXBwbGljYXRpb25BcmdzCiAgICBzd2FwCiAgICBpdHhuX2ZpZWxkIEFwcGxpY2F0aW9uSUQKICAgIHB1c2hpbnQgNiAvLyBhcHBsCiAgICBpdHhuX2ZpZWxkIFR5cGVFbnVtCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czoyOTcKICAgIC8vIGZlZTogMCwKICAgIGludGNfMCAvLyAwCiAgICBpdHhuX2ZpZWxkIEZlZQogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6Mjk0LTI5OAogICAgLy8gY29uc3QgciA9IGFyYzQuYWJpQ2FsbChSYW5kb21uZXNzQmVhY29uQ2FsbGVyU3R1Yi5wcm90b3R5cGUuZnVsZmlsbFJhbmRvbW5lc3MsIHsKICAgIC8vICAgYXBwSWQ6IHJlcXVlc3QucmVxdWVzdGVyQXBwSWQubmF0aXZlLAogICAgLy8gICBhcmdzOiBbcmVxdWVzdElkLCByZXF1ZXN0LnJlcXVlc3RlckFkZHJlc3MsIG5ldyBhcmM0LlN0YXRpY0J5dGVzPDY0PihvdXRwdXQpXSwKICAgIC8vICAgZmVlOiAwLAogICAgLy8gfSkKICAgIGl0eG5fc3VibWl0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czozMDEtMzA4CiAgICAvLyBpdHhuCiAgICAvLyAgIC5wYXltZW50KHsKICAgIC8vICAgICByZWNlaXZlcjogVHhuLnNlbmRlciwKICAgIC8vICAgICBhbW91bnQ6IHJlcXVlc3QuZmVlUGFpZC5uYXRpdmUsCiAgICAvLyAgICAgbm90ZTogTk9URV9GRUVTX1BBWU1FTlQsCiAgICAvLyAgICAgZmVlOiAwLAogICAgLy8gICB9KQogICAgLy8gICAuc3VibWl0KCkKICAgIGl0eG5fYmVnaW4KICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjMwMwogICAgLy8gcmVjZWl2ZXI6IFR4bi5zZW5kZXIsCiAgICB0eG4gU2VuZGVyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czozMDQKICAgIC8vIGFtb3VudDogcmVxdWVzdC5mZWVQYWlkLm5hdGl2ZSwKICAgIGRpZyAzCiAgICBwdXNoaW50IDU2IC8vIDU2CiAgICBleHRyYWN0X3VpbnQ2NAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL3R5cGVzLmFsZ28udHM6MTUKICAgIC8vIGV4cG9ydCBjb25zdCBOT1RFX0ZFRVNfUEFZTUVOVCA9ICdmZWVzIHBheW1lbnQgZm9yIGNhbGxlcicKICAgIHB1c2hieXRlcyAiZmVlcyBwYXltZW50IGZvciBjYWxsZXIiCiAgICBpdHhuX2ZpZWxkIE5vdGUKICAgIGl0eG5fZmllbGQgQW1vdW50CiAgICBpdHhuX2ZpZWxkIFJlY2VpdmVyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czozMDEtMzA3CiAgICAvLyBpdHhuCiAgICAvLyAgIC5wYXltZW50KHsKICAgIC8vICAgICByZWNlaXZlcjogVHhuLnNlbmRlciwKICAgIC8vICAgICBhbW91bnQ6IHJlcXVlc3QuZmVlUGFpZC5uYXRpdmUsCiAgICAvLyAgICAgbm90ZTogTk9URV9GRUVTX1BBWU1FTlQsCiAgICAvLyAgICAgZmVlOiAwLAogICAgLy8gICB9KQogICAgaW50Y18xIC8vIDEKICAgIGl0eG5fZmllbGQgVHlwZUVudW0KICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjMwNgogICAgLy8gZmVlOiAwLAogICAgaW50Y18wIC8vIDAKICAgIGl0eG5fZmllbGQgRmVlCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czozMDEtMzA4CiAgICAvLyBpdHhuCiAgICAvLyAgIC5wYXltZW50KHsKICAgIC8vICAgICByZWNlaXZlcjogVHhuLnNlbmRlciwKICAgIC8vICAgICBhbW91bnQ6IHJlcXVlc3QuZmVlUGFpZC5uYXRpdmUsCiAgICAvLyAgICAgbm90ZTogTk9URV9GRUVTX1BBWU1FTlQsCiAgICAvLyAgICAgZmVlOiAwLAogICAgLy8gICB9KQogICAgLy8gICAuc3VibWl0KCkKICAgIGl0eG5fc3VibWl0CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czozMTEtMzE4CiAgICAvLyBpdHhuCiAgICAvLyAgIC5wYXltZW50KHsKICAgIC8vICAgICByZWNlaXZlcjogcmVxdWVzdC5yZXF1ZXN0ZXJBZGRyZXNzLm5hdGl2ZSwKICAgIC8vICAgICBhbW91bnQ6IHJlcXVlc3QuYm94Q29zdC5uYXRpdmUsCiAgICAvLyAgICAgbm90ZTogTk9URV9CT1hfTUJSX1JFRlVORCwKICAgIC8vICAgICBmZWU6IDAsCiAgICAvLyAgIH0pCiAgICAvLyAgIC5zdWJtaXQoKQogICAgaXR4bl9iZWdpbgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MzE0CiAgICAvLyBhbW91bnQ6IHJlcXVlc3QuYm94Q29zdC5uYXRpdmUsCiAgICB1bmNvdmVyIDIKICAgIGludGNfMyAvLyA2NAogICAgZXh0cmFjdF91aW50NjQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi90eXBlcy5hbGdvLnRzOjE0CiAgICAvLyBleHBvcnQgY29uc3QgTk9URV9CT1hfTUJSX1JFRlVORCA9ICdib3ggbWJyIHJlZnVuZCcKICAgIGJ5dGVjIDExIC8vICJib3ggbWJyIHJlZnVuZCIKICAgIGl0eG5fZmllbGQgTm90ZQogICAgaXR4bl9maWVsZCBBbW91bnQKICAgIGR1cAogICAgaXR4bl9maWVsZCBSZWNlaXZlcgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MzExLTMxNwogICAgLy8gaXR4bgogICAgLy8gICAucGF5bWVudCh7CiAgICAvLyAgICAgcmVjZWl2ZXI6IHJlcXVlc3QucmVxdWVzdGVyQWRkcmVzcy5uYXRpdmUsCiAgICAvLyAgICAgYW1vdW50OiByZXF1ZXN0LmJveENvc3QubmF0aXZlLAogICAgLy8gICAgIG5vdGU6IE5PVEVfQk9YX01CUl9SRUZVTkQsCiAgICAvLyAgICAgZmVlOiAwLAogICAgLy8gICB9KQogICAgaW50Y18xIC8vIDEKICAgIGl0eG5fZmllbGQgVHlwZUVudW0KICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjMxNgogICAgLy8gZmVlOiAwLAogICAgaW50Y18wIC8vIDAKICAgIGl0eG5fZmllbGQgRmVlCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czozMTEtMzE4CiAgICAvLyBpdHhuCiAgICAvLyAgIC5wYXltZW50KHsKICAgIC8vICAgICByZWNlaXZlcjogcmVxdWVzdC5yZXF1ZXN0ZXJBZGRyZXNzLm5hdGl2ZSwKICAgIC8vICAgICBhbW91bnQ6IHJlcXVlc3QuYm94Q29zdC5uYXRpdmUsCiAgICAvLyAgICAgbm90ZTogTk9URV9CT1hfTUJSX1JFRlVORCwKICAgIC8vICAgICBmZWU6IDAsCiAgICAvLyAgIH0pCiAgICAvLyAgIC5zdWJtaXQoKQogICAgaXR4bl9zdWJtaXQKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjMyMi0zMjYKICAgIC8vIG5ldyBSZXF1ZXN0RnVsZmlsbGVkKHsKICAgIC8vICAgcmVxdWVzdElkOiByZXF1ZXN0SWQsCiAgICAvLyAgIHJlcXVlc3RlckFwcElkOiByZXF1ZXN0LnJlcXVlc3RlckFwcElkLAogICAgLy8gICByZXF1ZXN0ZXJBZGRyZXNzOiByZXF1ZXN0LnJlcXVlc3RlckFkZHJlc3MsCiAgICAvLyB9KSwKICAgIGZyYW1lX2RpZyAtMgogICAgdW5jb3ZlciAyCiAgICBjb25jYXQKICAgIHN3YXAKICAgIGNvbmNhdAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6MzIxLTMyNwogICAgLy8gZW1pdCgKICAgIC8vICAgbmV3IFJlcXVlc3RGdWxmaWxsZWQoewogICAgLy8gICAgIHJlcXVlc3RJZDogcmVxdWVzdElkLAogICAgLy8gICAgIHJlcXVlc3RlckFwcElkOiByZXF1ZXN0LnJlcXVlc3RlckFwcElkLAogICAgLy8gICAgIHJlcXVlc3RlckFkZHJlc3M6IHJlcXVlc3QucmVxdWVzdGVyQWRkcmVzcywKICAgIC8vICAgfSksCiAgICAvLyApCiAgICBwdXNoYnl0ZXMgMHg2Y2NjMWNiZSAvLyBtZXRob2QgIlJlcXVlc3RGdWxmaWxsZWQodWludDY0LHVpbnQ2NCxhZGRyZXNzKSIKICAgIHN3YXAKICAgIGNvbmNhdAogICAgbG9nCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czozMzAKICAgIC8vIHRoaXMuZGVsZXRlUmVxdWVzdChyZXF1ZXN0SWQpCiAgICBmcmFtZV9kaWcgLTIKICAgIGNhbGxzdWIgZGVsZXRlUmVxdWVzdAogICAgcmV0c3ViCgoKLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0LmFsZ28udHM6OlJhbmRvbW5lc3NCZWFjb24uZ2V0Q29zdHMoKSAtPiBieXRlczoKZ2V0Q29zdHM6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czozNDgKICAgIC8vIGNvbnN0IHR4bkZlZXM6IHVpbnQ2NCA9IEdsb2JhbC5taW5UeG5GZWUgKiBudW1SZXF1aXJlZFR4bnMKICAgIGdsb2JhbCBNaW5UeG5GZWUKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjM0NgogICAgLy8gY29uc3QgbnVtUmVxdWlyZWRUeG5zOiB1aW50NjQgPSA4ICsgMiArIDEgKyAxCiAgICBwdXNoaW50IDEyIC8vIDEyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czozNDgKICAgIC8vIGNvbnN0IHR4bkZlZXM6IHVpbnQ2NCA9IEdsb2JhbC5taW5UeG5GZWUgKiBudW1SZXF1aXJlZFR4bnMKICAgICoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdC5hbGdvLnRzOjM2NQogICAgLy8gcmV0dXJuIG5ldyBhcmM0LlR1cGxlKG5ldyBhcmM0LlVpbnRONjQodHhuRmVlcyksIG5ldyBhcmM0LlVpbnRONjQoYm94Q29zdCkpCiAgICBpdG9iCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czozNjMKICAgIC8vIGNvbnN0IGJveENvc3Q6IHVpbnQ2NCA9IEJPWF9DUkVBVEVfQ09TVCArIEJPWF9CWVRFX0NPU1QgKiAoa2V5U2l6ZSArIGJveFNpemUpCiAgICBwdXNoaW50IDM3NzAwIC8vIDM3NzAwCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3QuYWxnby50czozNjUKICAgIC8vIHJldHVybiBuZXcgYXJjNC5UdXBsZShuZXcgYXJjNC5VaW50TjY0KHR4bkZlZXMpLCBuZXcgYXJjNC5VaW50TjY0KGJveENvc3QpKQogICAgaXRvYgogICAgY29uY2F0CiAgICByZXRzdWIKCgovLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL21hbmFnYWJsZS5hbGdvLnRzOjpNYW5hZ2FibGUub25seU1hbmFnZXIoKSAtPiB2b2lkOgpvbmx5TWFuYWdlcjoKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6MTUKICAgIC8vIGtleTogJ21hbmFnZXInLAogICAgaW50Y18wIC8vIDAKICAgIGJ5dGVjXzEgLy8gIm1hbmFnZXIiCiAgICBhcHBfZ2xvYmFsX2dldF9leAogICAgYXNzZXJ0IC8vIGNoZWNrIEdsb2JhbFN0YXRlIGV4aXN0cwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czoyNAogICAgLy8gYXNzZXJ0KHRoaXMuX21hbmFnZXIudmFsdWUubmF0aXZlID09PSBUeG4uc2VuZGVyLCBFUlJfT05MWV9NQU5BR0VSKQogICAgdHhuIFNlbmRlcgogICAgPT0KICAgIGFzc2VydCAvLyBvbmx5IG1hbmFnZXIgY2FuIHBlcmZvcm0gdGhpcyBhY3Rpb24KICAgIHJldHN1YgoKCi8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6Ok1hbmFnYWJsZS51cGRhdGVNYW5hZ2VyKG5ld01hbmFnZXI6IGJ5dGVzKSAtPiB2b2lkOgp1cGRhdGVNYW5hZ2VyOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czozMQogICAgLy8gcHVibGljIHVwZGF0ZU1hbmFnZXIobmV3TWFuYWdlcjogYXJjNC5BZGRyZXNzKTogdm9pZCB7CiAgICBwcm90byAxIDAKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6MzMKICAgIC8vIHRoaXMub25seU1hbmFnZXIoKQogICAgY2FsbHN1YiBvbmx5TWFuYWdlcgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9tYW5hZ2FibGUuYWxnby50czozNQogICAgLy8gYXNzZXJ0KG5ld01hbmFnZXIubmF0aXZlICE9PSBHbG9iYWwuemVyb0FkZHJlc3MsIEVSUl9aRVJPX0FERFJFU1MpCiAgICBmcmFtZV9kaWcgLTEKICAgIGdsb2JhbCBaZXJvQWRkcmVzcwogICAgIT0KICAgIGFzc2VydCAvLyBtYW5hZ2VyIGNhbm5vdCBiZSB6ZXJvIGFkZHJlc3MKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6MTUKICAgIC8vIGtleTogJ21hbmFnZXInLAogICAgYnl0ZWNfMSAvLyAibWFuYWdlciIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6MzcKICAgIC8vIHRoaXMuX21hbmFnZXIudmFsdWUgPSBuZXdNYW5hZ2VyCiAgICBmcmFtZV9kaWcgLTEKICAgIGFwcF9nbG9iYWxfcHV0CiAgICByZXRzdWIKCgovLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL21hbmFnYWJsZS5hbGdvLnRzOjpNYW5hZ2FibGUuZGVsZXRlTWFuYWdlcigpIC0+IHZvaWQ6CmRlbGV0ZU1hbmFnZXI6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL21hbmFnYWJsZS5hbGdvLnRzOjQ2CiAgICAvLyB0aGlzLm9ubHlNYW5hZ2VyKCkKICAgIGNhbGxzdWIgb25seU1hbmFnZXIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6MTUKICAgIC8vIGtleTogJ21hbmFnZXInLAogICAgYnl0ZWNfMSAvLyAibWFuYWdlciIKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6NDgKICAgIC8vIHRoaXMuX21hbmFnZXIudmFsdWUgPSBuZXcgYXJjNC5BZGRyZXNzKEdsb2JhbC56ZXJvQWRkcmVzcykKICAgIGdsb2JhbCBaZXJvQWRkcmVzcwogICAgYXBwX2dsb2JhbF9wdXQKICAgIHJldHN1YgoKCi8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6Ok1hbmFnYWJsZS5tYW5hZ2VyKCkgLT4gYnl0ZXM6Cm1hbmFnZXI6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL21hbmFnYWJsZS5hbGdvLnRzOjE1CiAgICAvLyBrZXk6ICdtYW5hZ2VyJywKICAgIGludGNfMCAvLyAwCiAgICBieXRlY18xIC8vICJtYW5hZ2VyIgogICAgYXBwX2dsb2JhbF9nZXRfZXgKICAgIGFzc2VydCAvLyBjaGVjayBHbG9iYWxTdGF0ZSBleGlzdHMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvbWFuYWdhYmxlLmFsZ28udHM6NTcKICAgIC8vIHJldHVybiB0aGlzLl9tYW5hZ2VyLnZhbHVlCiAgICByZXRzdWIKCgovLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6OlBhdXNhYmxlLm9ubHlQYXVzZXIoKSAtPiB2b2lkOgpvbmx5UGF1c2VyOgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjgKICAgIC8vIGtleTogJ3BhdXNlcicsCiAgICBpbnRjXzAgLy8gMAogICAgYnl0ZWNfMiAvLyAicGF1c2VyIgogICAgYXBwX2dsb2JhbF9nZXRfZXgKICAgIGFzc2VydCAvLyBjaGVjayBHbG9iYWxTdGF0ZSBleGlzdHMKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czoyMAogICAgLy8gYXNzZXJ0KHRoaXMuX3BhdXNlci52YWx1ZS5uYXRpdmUgPT09IFR4bi5zZW5kZXIsIEVSUl9PTkxZX1BBVVNFUikKICAgIHR4biBTZW5kZXIKICAgID09CiAgICBhc3NlcnQgLy8gb25seSBwYXVzZXIgY2FuIGNhbGwgdGhpcyBtZXRob2QKICAgIHJldHN1YgoKCi8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czo6UGF1c2FibGUucGF1c2UoKSAtPiB2b2lkOgpwYXVzZToKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czoyNAogICAgLy8gdGhpcy5vbmx5UGF1c2VyKCkKICAgIGNhbGxzdWIgb25seVBhdXNlcgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjEzCiAgICAvLyBwYXVzZWQgPSBHbG9iYWxTdGF0ZTxhcmM0LkJvb2w+KHsga2V5OiAncGF1c2VkJywgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5Cb29sKGZhbHNlKSB9KQogICAgYnl0ZWNfMyAvLyAicGF1c2VkIgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjI2CiAgICAvLyB0aGlzLnBhdXNlZC52YWx1ZSA9IG5ldyBhcmM0LkJvb2wodHJ1ZSkKICAgIHB1c2hieXRlcyAweDgwCiAgICBhcHBfZ2xvYmFsX3B1dAogICAgcmV0c3ViCgoKLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjpQYXVzYWJsZS51bnBhdXNlKCkgLT4gdm9pZDoKdW5wYXVzZToKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czozMgogICAgLy8gdGhpcy5vbmx5UGF1c2VyKCkKICAgIGNhbGxzdWIgb25seVBhdXNlcgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjEzCiAgICAvLyBwYXVzZWQgPSBHbG9iYWxTdGF0ZTxhcmM0LkJvb2w+KHsga2V5OiAncGF1c2VkJywgaW5pdGlhbFZhbHVlOiBuZXcgYXJjNC5Cb29sKGZhbHNlKSB9KQogICAgYnl0ZWNfMyAvLyAicGF1c2VkIgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjM0CiAgICAvLyB0aGlzLnBhdXNlZC52YWx1ZSA9IG5ldyBhcmM0LkJvb2woZmFsc2UpCiAgICBwdXNoYnl0ZXMgMHgwMAogICAgYXBwX2dsb2JhbF9wdXQKICAgIHJldHN1YgoKCi8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czo6UGF1c2FibGUudXBkYXRlUGF1c2VyKF9uZXdQYXVzZXI6IGJ5dGVzKSAtPiB2b2lkOgp1cGRhdGVQYXVzZXI6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6MzcKICAgIC8vIHVwZGF0ZVBhdXNlcihfbmV3UGF1c2VyOiBhcmM0LkFkZHJlc3MpOiB2b2lkIHsKICAgIHByb3RvIDEgMAogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjM4CiAgICAvLyB0aGlzLm9ubHlQYXVzZXIoKQogICAgY2FsbHN1YiBvbmx5UGF1c2VyCiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6NDAKICAgIC8vIGFzc2VydChfbmV3UGF1c2VyLm5hdGl2ZSAhPT0gR2xvYmFsLnplcm9BZGRyZXNzLCBFUlJfWkVST19BRERSRVNTKQogICAgZnJhbWVfZGlnIC0xCiAgICBnbG9iYWwgWmVyb0FkZHJlc3MKICAgICE9CiAgICBhc3NlcnQgLy8gcGF1c2VyIGNhbm5vdCBiZSB6ZXJvIGFkZHJlc3MKICAgIC8vIHNtYXJ0X2NvbnRyYWN0cy9yYW5kb21uZXNzX2JlYWNvbi9jb250cmFjdHMvcGF1c2FibGUuYWxnby50czo4CiAgICAvLyBrZXk6ICdwYXVzZXInLAogICAgYnl0ZWNfMiAvLyAicGF1c2VyIgogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjQxCiAgICAvLyB0aGlzLl9wYXVzZXIudmFsdWUgPSBfbmV3UGF1c2VyCiAgICBmcmFtZV9kaWcgLTEKICAgIGFwcF9nbG9iYWxfcHV0CiAgICByZXRzdWIKCgovLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6OlBhdXNhYmxlLnBhdXNlcigpIC0+IGJ5dGVzOgpwYXVzZXI6CiAgICAvLyBzbWFydF9jb250cmFjdHMvcmFuZG9tbmVzc19iZWFjb24vY29udHJhY3RzL3BhdXNhYmxlLmFsZ28udHM6OAogICAgLy8ga2V5OiAncGF1c2VyJywKICAgIGludGNfMCAvLyAwCiAgICBieXRlY18yIC8vICJwYXVzZXIiCiAgICBhcHBfZ2xvYmFsX2dldF9leAogICAgYXNzZXJ0IC8vIGNoZWNrIEdsb2JhbFN0YXRlIGV4aXN0cwogICAgLy8gc21hcnRfY29udHJhY3RzL3JhbmRvbW5lc3NfYmVhY29uL2NvbnRyYWN0cy9wYXVzYWJsZS5hbGdvLnRzOjUyCiAgICAvLyByZXR1cm4gdGhpcy5fcGF1c2VyLnZhbHVlCiAgICByZXRzdWIK","clear":"I3ByYWdtYSB2ZXJzaW9uIDExCiNwcmFnbWEgdHlwZXRyYWNrIGZhbHNlCgovLyBAYWxnb3JhbmRmb3VuZGF0aW9uL2FsZ29yYW5kLXR5cGVzY3JpcHQvYmFzZS1jb250cmFjdC5kLnRzOjpCYXNlQ29udHJhY3QuY2xlYXJTdGF0ZVByb2dyYW0oKSAtPiB1aW50NjQ6Cm1haW46CiAgICBwdXNoaW50IDEgLy8gMQogICAgcmV0dXJuCg=="},"byteCode":{"approval":"CyAEAAEIQCYNFHRvdGFsUGVuZGluZ1JlcXVlc3RzB21hbmFnZXIGcGF1c2VyBnBhdXNlZAQVH3x1CHJlcXVlc3RzDW5leHRSZXF1ZXN0SWQJcHVibGljS2V5Em1heFBlbmRpbmdSZXF1ZXN0cw9tYXhGdXR1cmVSb3VuZHMTc3RhbGVSZXF1ZXN0VGltZW91dA5ib3ggbWJyIHJlZnVuZAMGgQExGEAAJikyCWcqMglnK4ABAGcnBoAIAAAAAAAAAAFnKIAIAAAAAAAAAABnMRtBAGmCDgTVyuTGBEb3ZTMEJIfDLATYmO63BPEsYp4EIbacWQRsGWFaBIlgFo4E1I1CbARnQ0AxBAF4+UsEG1Kd6AQMrdFjBLDZU7M2GgCODgDVAMcAuQCYAIkAdwBmAFcASwA6AC4AIgATAAIiQzEZFEQxGESIA9EnBExQsCNDMRkURDEYRDYaAYgDrCNDMRkURDEYRIgDlyNDMRkURDEYRIgDgiNDMRkURDEYRIgDaCcETFCwI0MxGRREMRhEiANPI0MxGRREMRhENhoBiAMvI0MxGRREMRhEiAMNJwRMULAjQzEZFEQxGEQ2GgE2GgKIAiQjQzEZFEQxGEQ2GgGIAXQjQzEZFEQxGEQ2GgE2GgIxFiMJSTgQIxJEiACoJwRMULAjQzEZgQUSRDEYRIgAWyNDMRmBBBJEMRhEiABJI0MxGRREMRgURDYaATYaAjYaAzYaBIgAGCNDigEAIihlRBcjCRYoTGcnBYv/ULxIiYoEACcHi/xnJwiL/WcnCYv+ZycKi/9niYgCa4mIAmciKGVEFxREsYgCfoAeY2xvc2Ugb3V0IHJlbWFpbmRlciB0byBtYW5hZ2VysgWyCSOyECKyAbOJigMBIitlRCJTFEQiKGVEFyInCGVEFwxEi/4XSTIGDUQyBiInCWVEFwgORDINSUSIAfFJVwgIi/84BzIKEkEAbIv/OAiLAUkiW0wkWwgPQQBbI0SL/zgIiwEkWwkyBhaLABZPAhZPAksCUIv9UIv+UExQiwJQIicGZURJFyMIFicGTGcnBUsBUE8CvyIoZUQXIwgWKExnSU8CUIv9UIv+UIAE0GtW5kxQsIwAiSJC/6KKAQAnBYv/UL5MSU8CRDIGSwGBMFsiJwplRBcID0RJJVtLAYE4WwhJTwJXECBJTgIxABNBADwyAIEDC4sBSwEJsTEAgBxjYW5jZWxsYXRpb24gZmVlcyBmb3IgY2FsbGVysgVPArIIsgcjshAisgGzjAOLA7EnC7IFsgiLAkmyByOyECKyAbOLAFcICIv/TFBMUIAExRz2fUxQsIv/iP5EiYoCAIgA2ScFi/5QvkxJTwJEgTBb0QCBziwyDA1BABixgQayEIEFshknDLIeJwyyHyKyAbNC/98iJwdlRIsBi/9PAtAARLGLAElXCAhLASRbSwJXECBLBBUlEkSABELL/kyyGov+shpJshpPBLIaTLIYgQayECKyAbOxMQBLA4E4W4AXZmVlcyBwYXltZW50IGZvciBjYWxsZXKyBbIIsgcjshAisgGzsU8CJVsnC7IFsghJsgcjshAisgGzi/5PAlBMUIAEbMwcvkxQsIv+iP1yiTIAgQwLFoHEpgIWUIkiKWVEMQASRImKAQCI//GL/zIDE0Qpi/9niYj/4ykyA2eJIillRIkiKmVEMQASRImI//QrgAGAZ4mI/+srgAEAZ4mKAQCI/9+L/zIDE0Qqi/9niSIqZUSJ","clear":"C4EBQw=="},"events":[{"name":"RequestCreated","args":[{"type":"uint64","name":"requestId"},{"type":"uint64","name":"requesterAppId"},{"type":"address","name":"requesterAddress"},{"type":"uint64","name":"round"}]},{"name":"RequestCancelled","args":[{"type":"uint64","name":"requestId"},{"type":"uint64","name":"requesterAppId"},{"type":"address","name":"requesterAddress"}]},{"name":"RequestFulfilled","args":[{"type":"uint64","name":"requestId"},{"type":"uint64","name":"requesterAppId"},{"type":"address","name":"requesterAddress"}]}],"templateVariables":{}} as unknown as Arc56Contract
 
 /**
  * A state record containing binary data
@@ -364,16 +61,18 @@ export type Expand<T> = T extends (...args: infer A) => infer R
     ? { [K in keyof O]: O[K] }
     : never
 
+
 // Type definitions for ARC-56 structs
 
 export type RandomnessRequest = {
-  createdAt: bigint
-  requesterAppId: bigint
-  requesterAddress: string
-  round: bigint
-  feePaid: bigint
+  createdAt: bigint,
+  requesterAppId: bigint,
+  requesterAddress: string,
+  round: bigint,
+  feePaid: bigint,
   boxCost: bigint
 }
+
 
 /**
  * Converts the ABI tuple representation of a RandomnessRequest to the struct representation
@@ -390,11 +89,20 @@ export type RandomnessBeaconArgs = {
    * The object representation of the arguments for each method
    */
   obj: {
-    'createApplication(byte[32])void': {
+    'createApplication(byte[32],uint64,uint64,uint64)void': {
       /**
        * the public key used to verify VRF proofs we will accept
        */
       publicKey: Uint8Array
+      /**
+       * the maximum number of pending requests allowed at any time
+       */
+      maxPendingRequests: bigint | number
+      /**
+       * the maximum round in the future a request can be targeted
+       */
+      maxFutureRounds: bigint | number
+      staleRequestTimeout: bigint | number
     }
     'updateApplication()void': Record<string, never>
     'deleteApplication()void': Record<string, never>
@@ -442,14 +150,10 @@ export type RandomnessBeaconArgs = {
    * The tuple representation of the arguments for each method
    */
   tuple: {
-    'createApplication(byte[32])void': [publicKey: Uint8Array]
+    'createApplication(byte[32],uint64,uint64,uint64)void': [publicKey: Uint8Array, maxPendingRequests: bigint | number, maxFutureRounds: bigint | number, staleRequestTimeout: bigint | number]
     'updateApplication()void': []
     'deleteApplication()void': []
-    'createRequest(address,uint64,pay)uint64': [
-      requesterAddress: string,
-      round: bigint | number,
-      costsPayment: AppMethodCallTransactionArgument,
-    ]
+    'createRequest(address,uint64,pay)uint64': [requesterAddress: string, round: bigint | number, costsPayment: AppMethodCallTransactionArgument]
     'cancelRequest(uint64)void': [requestId: bigint | number]
     'completeRequest(uint64,byte[80])void': [requestId: bigint | number, proof: Uint8Array]
     'getCosts()(uint64,uint64)': []
@@ -467,7 +171,7 @@ export type RandomnessBeaconArgs = {
  * The return type for each method
  */
 export type RandomnessBeaconReturns = {
-  'createApplication(byte[32])void': void
+  'createApplication(byte[32],uint64,uint64,uint64)void': void
   'updateApplication()void': void
   'deleteApplication()void': void
   'createRequest(address,uint64,pay)uint64': bigint
@@ -490,130 +194,89 @@ export type RandomnessBeaconTypes = {
   /**
    * Maps method signatures / names to their argument and return types.
    */
-  methods: Record<
-    'createApplication(byte[32])void' | 'createApplication',
-    {
-      argsObj: RandomnessBeaconArgs['obj']['createApplication(byte[32])void']
-      argsTuple: RandomnessBeaconArgs['tuple']['createApplication(byte[32])void']
-      returns: RandomnessBeaconReturns['createApplication(byte[32])void']
-    }
-  > &
-    Record<
-      'updateApplication()void' | 'updateApplication',
-      {
-        argsObj: RandomnessBeaconArgs['obj']['updateApplication()void']
-        argsTuple: RandomnessBeaconArgs['tuple']['updateApplication()void']
-        returns: RandomnessBeaconReturns['updateApplication()void']
-      }
-    > &
-    Record<
-      'deleteApplication()void' | 'deleteApplication',
-      {
-        argsObj: RandomnessBeaconArgs['obj']['deleteApplication()void']
-        argsTuple: RandomnessBeaconArgs['tuple']['deleteApplication()void']
-        returns: RandomnessBeaconReturns['deleteApplication()void']
-      }
-    > &
-    Record<
-      'createRequest(address,uint64,pay)uint64' | 'createRequest',
-      {
-        argsObj: RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64']
-        argsTuple: RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']
-        /**
-         * a unique request ID to be used to identify the request
-         */
-        returns: RandomnessBeaconReturns['createRequest(address,uint64,pay)uint64']
-      }
-    > &
-    Record<
-      'cancelRequest(uint64)void' | 'cancelRequest',
-      {
-        argsObj: RandomnessBeaconArgs['obj']['cancelRequest(uint64)void']
-        argsTuple: RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']
-        returns: RandomnessBeaconReturns['cancelRequest(uint64)void']
-      }
-    > &
-    Record<
-      'completeRequest(uint64,byte[80])void' | 'completeRequest',
-      {
-        argsObj: RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void']
-        argsTuple: RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']
-        returns: RandomnessBeaconReturns['completeRequest(uint64,byte[80])void']
-      }
-    > &
-    Record<
-      'getCosts()(uint64,uint64)' | 'getCosts',
-      {
-        argsObj: RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)']
-        argsTuple: RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']
-        /**
-         * arc4.Tuple<[txnFees, boxCost] - tuple of the required txn fees and box cost (that will be refunded)
-         */
-        returns: RandomnessBeaconReturns['getCosts()(uint64,uint64)']
-      }
-    > &
-    Record<
-      'updateManager(address)void' | 'updateManager',
-      {
-        argsObj: RandomnessBeaconArgs['obj']['updateManager(address)void']
-        argsTuple: RandomnessBeaconArgs['tuple']['updateManager(address)void']
-        returns: RandomnessBeaconReturns['updateManager(address)void']
-      }
-    > &
-    Record<
-      'deleteManager()void' | 'deleteManager',
-      {
-        argsObj: RandomnessBeaconArgs['obj']['deleteManager()void']
-        argsTuple: RandomnessBeaconArgs['tuple']['deleteManager()void']
-        returns: RandomnessBeaconReturns['deleteManager()void']
-      }
-    > &
-    Record<
-      'manager()address' | 'manager',
-      {
-        argsObj: RandomnessBeaconArgs['obj']['manager()address']
-        argsTuple: RandomnessBeaconArgs['tuple']['manager()address']
-        /**
-         * The current manager of this contract
-         */
-        returns: RandomnessBeaconReturns['manager()address']
-      }
-    > &
-    Record<
-      'pause()void' | 'pause',
-      {
-        argsObj: RandomnessBeaconArgs['obj']['pause()void']
-        argsTuple: RandomnessBeaconArgs['tuple']['pause()void']
-        returns: RandomnessBeaconReturns['pause()void']
-      }
-    > &
-    Record<
-      'unpause()void' | 'unpause',
-      {
-        argsObj: RandomnessBeaconArgs['obj']['unpause()void']
-        argsTuple: RandomnessBeaconArgs['tuple']['unpause()void']
-        returns: RandomnessBeaconReturns['unpause()void']
-      }
-    > &
-    Record<
-      'updatePauser(address)void' | 'updatePauser',
-      {
-        argsObj: RandomnessBeaconArgs['obj']['updatePauser(address)void']
-        argsTuple: RandomnessBeaconArgs['tuple']['updatePauser(address)void']
-        returns: RandomnessBeaconReturns['updatePauser(address)void']
-      }
-    > &
-    Record<
-      'pauser()address' | 'pauser',
-      {
-        argsObj: RandomnessBeaconArgs['obj']['pauser()address']
-        argsTuple: RandomnessBeaconArgs['tuple']['pauser()address']
-        /**
-         * The current pauser
-         */
-        returns: RandomnessBeaconReturns['pauser()address']
-      }
-    >
+  methods:
+    & Record<'createApplication(byte[32],uint64,uint64,uint64)void' | 'createApplication', {
+      argsObj: RandomnessBeaconArgs['obj']['createApplication(byte[32],uint64,uint64,uint64)void']
+      argsTuple: RandomnessBeaconArgs['tuple']['createApplication(byte[32],uint64,uint64,uint64)void']
+      returns: RandomnessBeaconReturns['createApplication(byte[32],uint64,uint64,uint64)void']
+    }>
+    & Record<'updateApplication()void' | 'updateApplication', {
+      argsObj: RandomnessBeaconArgs['obj']['updateApplication()void']
+      argsTuple: RandomnessBeaconArgs['tuple']['updateApplication()void']
+      returns: RandomnessBeaconReturns['updateApplication()void']
+    }>
+    & Record<'deleteApplication()void' | 'deleteApplication', {
+      argsObj: RandomnessBeaconArgs['obj']['deleteApplication()void']
+      argsTuple: RandomnessBeaconArgs['tuple']['deleteApplication()void']
+      returns: RandomnessBeaconReturns['deleteApplication()void']
+    }>
+    & Record<'createRequest(address,uint64,pay)uint64' | 'createRequest', {
+      argsObj: RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64']
+      argsTuple: RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']
+      /**
+       * a unique request ID to be used to identify the request
+       */
+      returns: RandomnessBeaconReturns['createRequest(address,uint64,pay)uint64']
+    }>
+    & Record<'cancelRequest(uint64)void' | 'cancelRequest', {
+      argsObj: RandomnessBeaconArgs['obj']['cancelRequest(uint64)void']
+      argsTuple: RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']
+      returns: RandomnessBeaconReturns['cancelRequest(uint64)void']
+    }>
+    & Record<'completeRequest(uint64,byte[80])void' | 'completeRequest', {
+      argsObj: RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void']
+      argsTuple: RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']
+      returns: RandomnessBeaconReturns['completeRequest(uint64,byte[80])void']
+    }>
+    & Record<'getCosts()(uint64,uint64)' | 'getCosts', {
+      argsObj: RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)']
+      argsTuple: RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']
+      /**
+       * arc4.Tuple<[txnFees, boxCost] - tuple of the required txn fees and box cost (that will be refunded)
+       */
+      returns: RandomnessBeaconReturns['getCosts()(uint64,uint64)']
+    }>
+    & Record<'updateManager(address)void' | 'updateManager', {
+      argsObj: RandomnessBeaconArgs['obj']['updateManager(address)void']
+      argsTuple: RandomnessBeaconArgs['tuple']['updateManager(address)void']
+      returns: RandomnessBeaconReturns['updateManager(address)void']
+    }>
+    & Record<'deleteManager()void' | 'deleteManager', {
+      argsObj: RandomnessBeaconArgs['obj']['deleteManager()void']
+      argsTuple: RandomnessBeaconArgs['tuple']['deleteManager()void']
+      returns: RandomnessBeaconReturns['deleteManager()void']
+    }>
+    & Record<'manager()address' | 'manager', {
+      argsObj: RandomnessBeaconArgs['obj']['manager()address']
+      argsTuple: RandomnessBeaconArgs['tuple']['manager()address']
+      /**
+       * The current manager of this contract
+       */
+      returns: RandomnessBeaconReturns['manager()address']
+    }>
+    & Record<'pause()void' | 'pause', {
+      argsObj: RandomnessBeaconArgs['obj']['pause()void']
+      argsTuple: RandomnessBeaconArgs['tuple']['pause()void']
+      returns: RandomnessBeaconReturns['pause()void']
+    }>
+    & Record<'unpause()void' | 'unpause', {
+      argsObj: RandomnessBeaconArgs['obj']['unpause()void']
+      argsTuple: RandomnessBeaconArgs['tuple']['unpause()void']
+      returns: RandomnessBeaconReturns['unpause()void']
+    }>
+    & Record<'updatePauser(address)void' | 'updatePauser', {
+      argsObj: RandomnessBeaconArgs['obj']['updatePauser(address)void']
+      argsTuple: RandomnessBeaconArgs['tuple']['updatePauser(address)void']
+      returns: RandomnessBeaconReturns['updatePauser(address)void']
+    }>
+    & Record<'pauser()address' | 'pauser', {
+      argsObj: RandomnessBeaconArgs['obj']['pauser()address']
+      argsTuple: RandomnessBeaconArgs['tuple']['pauser()address']
+      /**
+       * The current pauser
+       */
+      returns: RandomnessBeaconReturns['pauser()address']
+    }>
   /**
    * Defines the shape of the state of the application.
    */
@@ -621,7 +284,19 @@ export type RandomnessBeaconTypes = {
     global: {
       keys: {
         publicKey: Uint8Array
-        currentRequestId: bigint
+        nextRequestId: bigint
+        /**
+         * Max rounds in the future ([current round] + maxFutureRounds) allowed for requests
+         */
+        maxFutureRounds: bigint
+        /**
+         * Max number of pending requests allowed
+         */
+        maxPendingRequests: bigint
+        /**
+         * Stale request timeout in rounds (after which a request can be cancelled after RandomnessRequest.round)
+         */
+        staleRequestTimeout: bigint
         totalPendingRequests: bigint
         _manager: string
         _pauser: string
@@ -645,33 +320,25 @@ export type RandomnessBeaconSignatures = keyof RandomnessBeaconTypes['methods']
 /**
  * Defines the possible abi call signatures for methods that return a non-void value.
  */
-export type RandomnessBeaconNonVoidMethodSignatures = keyof RandomnessBeaconTypes['methods'] extends infer T
-  ? T extends keyof RandomnessBeaconTypes['methods']
-    ? MethodReturn<T> extends void
-      ? never
-      : T
-    : never
-  : never
+export type RandomnessBeaconNonVoidMethodSignatures = keyof RandomnessBeaconTypes['methods'] extends infer T ? T extends keyof RandomnessBeaconTypes['methods'] ? MethodReturn<T> extends void ? never : T  : never : never
 /**
  * Defines an object containing all relevant parameters for a single call to the contract.
  */
 export type CallParams<TArgs> = Expand<
-  Omit<AppClientMethodCallParams, 'method' | 'args' | 'onComplete'> & {
-    /** The args for the ABI method call, either as an ordered array or an object */
-    args: Expand<TArgs>
-  }
+  Omit<AppClientMethodCallParams, 'method' | 'args' | 'onComplete'> &
+    {
+      /** The args for the ABI method call, either as an ordered array or an object */
+      args: Expand<TArgs>
+    }
 >
 /**
  * Maps a method signature from the RandomnessBeacon smart contract to the method's arguments in either tuple or struct form
  */
-export type MethodArgs<TSignature extends RandomnessBeaconSignatures> = RandomnessBeaconTypes['methods'][TSignature][
-  | 'argsObj'
-  | 'argsTuple']
+export type MethodArgs<TSignature extends RandomnessBeaconSignatures> = RandomnessBeaconTypes['methods'][TSignature]['argsObj' | 'argsTuple']
 /**
  * Maps a method signature from the RandomnessBeacon smart contract to the method's return type
  */
-export type MethodReturn<TSignature extends RandomnessBeaconSignatures> =
-  RandomnessBeaconTypes['methods'][TSignature]['returns']
+export type MethodReturn<TSignature extends RandomnessBeaconSignatures> = RandomnessBeaconTypes['methods'][TSignature]['returns']
 
 /**
  * Defines the shape of the keyed global state of the application.
@@ -683,81 +350,43 @@ export type GlobalKeysState = RandomnessBeaconTypes['state']['global']['keys']
  */
 export type BoxKeysState = RandomnessBeaconTypes['state']['box']['keys']
 
+
 /**
  * Defines supported create method params for this smart contract
  */
 export type RandomnessBeaconCreateCallParams =
-  | Expand<
-      CallParams<
-        | RandomnessBeaconArgs['obj']['createApplication(byte[32])void']
-        | RandomnessBeaconArgs['tuple']['createApplication(byte[32])void']
-      > & { method: 'createApplication' } & { onComplete?: OnApplicationComplete.NoOpOC } & CreateSchema
-    >
-  | Expand<
-      CallParams<
-        | RandomnessBeaconArgs['obj']['createApplication(byte[32])void']
-        | RandomnessBeaconArgs['tuple']['createApplication(byte[32])void']
-      > & { method: 'createApplication(byte[32])void' } & { onComplete?: OnApplicationComplete.NoOpOC } & CreateSchema
-    >
+  | Expand<CallParams<RandomnessBeaconArgs['obj']['createApplication(byte[32],uint64,uint64,uint64)void'] | RandomnessBeaconArgs['tuple']['createApplication(byte[32],uint64,uint64,uint64)void']> & {method: 'createApplication'} & {onComplete?: OnApplicationComplete.NoOpOC} & CreateSchema>
+  | Expand<CallParams<RandomnessBeaconArgs['obj']['createApplication(byte[32],uint64,uint64,uint64)void'] | RandomnessBeaconArgs['tuple']['createApplication(byte[32],uint64,uint64,uint64)void']> & {method: 'createApplication(byte[32],uint64,uint64,uint64)void'} & {onComplete?: OnApplicationComplete.NoOpOC} & CreateSchema>
 /**
  * Defines supported update method params for this smart contract
  */
 export type RandomnessBeaconUpdateCallParams =
-  | Expand<
-      CallParams<
-        | RandomnessBeaconArgs['obj']['updateApplication()void']
-        | RandomnessBeaconArgs['tuple']['updateApplication()void']
-      > & {
-        method: 'updateApplication'
-      }
-    >
-  | Expand<
-      CallParams<
-        | RandomnessBeaconArgs['obj']['updateApplication()void']
-        | RandomnessBeaconArgs['tuple']['updateApplication()void']
-      > & {
-        method: 'updateApplication()void'
-      }
-    >
+  | Expand<CallParams<RandomnessBeaconArgs['obj']['updateApplication()void'] | RandomnessBeaconArgs['tuple']['updateApplication()void']> & {method: 'updateApplication'}>
+  | Expand<CallParams<RandomnessBeaconArgs['obj']['updateApplication()void'] | RandomnessBeaconArgs['tuple']['updateApplication()void']> & {method: 'updateApplication()void'}>
 /**
  * Defines supported delete method params for this smart contract
  */
 export type RandomnessBeaconDeleteCallParams =
-  | Expand<
-      CallParams<
-        | RandomnessBeaconArgs['obj']['deleteApplication()void']
-        | RandomnessBeaconArgs['tuple']['deleteApplication()void']
-      > & {
-        method: 'deleteApplication'
-      }
-    >
-  | Expand<
-      CallParams<
-        | RandomnessBeaconArgs['obj']['deleteApplication()void']
-        | RandomnessBeaconArgs['tuple']['deleteApplication()void']
-      > & {
-        method: 'deleteApplication()void'
-      }
-    >
+  | Expand<CallParams<RandomnessBeaconArgs['obj']['deleteApplication()void'] | RandomnessBeaconArgs['tuple']['deleteApplication()void']> & {method: 'deleteApplication'}>
+  | Expand<CallParams<RandomnessBeaconArgs['obj']['deleteApplication()void'] | RandomnessBeaconArgs['tuple']['deleteApplication()void']> & {method: 'deleteApplication()void'}>
 /**
  * Defines arguments required for the deploy method.
  */
-export type RandomnessBeaconDeployParams = Expand<
-  Omit<AppFactoryDeployParams, 'createParams' | 'updateParams' | 'deleteParams'> & {
-    /**
-     * Create transaction parameters to use if a create needs to be issued as part of deployment; use `method` to define ABI call (if available) or leave out for a bare call (if available)
-     */
-    createParams?: RandomnessBeaconCreateCallParams
-    /**
-     * Update transaction parameters to use if a create needs to be issued as part of deployment; use `method` to define ABI call (if available) or leave out for a bare call (if available)
-     */
-    updateParams?: RandomnessBeaconUpdateCallParams
-    /**
-     * Delete transaction parameters to use if a create needs to be issued as part of deployment; use `method` to define ABI call (if available) or leave out for a bare call (if available)
-     */
-    deleteParams?: RandomnessBeaconDeleteCallParams
-  }
->
+export type RandomnessBeaconDeployParams = Expand<Omit<AppFactoryDeployParams, 'createParams' | 'updateParams' | 'deleteParams'> & {
+  /**
+   * Create transaction parameters to use if a create needs to be issued as part of deployment; use `method` to define ABI call (if available) or leave out for a bare call (if available)
+   */
+  createParams?: RandomnessBeaconCreateCallParams
+  /**
+   * Update transaction parameters to use if a create needs to be issued as part of deployment; use `method` to define ABI call (if available) or leave out for a bare call (if available)
+   */
+  updateParams?: RandomnessBeaconUpdateCallParams
+  /**
+   * Delete transaction parameters to use if a create needs to be issued as part of deployment; use `method` to define ABI call (if available) or leave out for a bare call (if available)
+   */
+  deleteParams?: RandomnessBeaconDeleteCallParams
+}>
+
 
 /**
  * Exposes methods for constructing `AppClient` params objects for ABI calls to the RandomnessBeacon smart contract
@@ -768,32 +397,26 @@ export abstract class RandomnessBeaconParamsFactory {
    */
   static get create() {
     return {
-      _resolveByMethod<TParams extends RandomnessBeaconCreateCallParams & { method: string }>(params: TParams) {
-        switch (params.method) {
+      _resolveByMethod<TParams extends RandomnessBeaconCreateCallParams & {method: string}>(params: TParams) {
+        switch(params.method) {
           case 'createApplication':
-          case 'createApplication(byte[32])void':
+          case 'createApplication(byte[32],uint64,uint64,uint64)void':
             return RandomnessBeaconParamsFactory.create.createApplication(params)
         }
         throw new Error(`Unknown ' + verb + ' method`)
       },
 
       /**
-       * Constructs create ABI call params for the RandomnessBeacon smart contract using the createApplication(byte[32])void ABI method
+       * Constructs create ABI call params for the RandomnessBeacon smart contract using the createApplication(byte[32],uint64,uint64,uint64)void ABI method
        *
        * @param params Parameters for the call
        * @returns An `AppClientMethodCallParams` object for the call
        */
-      createApplication(
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['createApplication(byte[32])void']
-          | RandomnessBeaconArgs['tuple']['createApplication(byte[32])void']
-        > &
-          AppClientCompilationParams & { onComplete?: OnApplicationComplete.NoOpOC },
-      ): AppClientMethodCallParams & AppClientCompilationParams & { onComplete?: OnApplicationComplete.NoOpOC } {
+      createApplication(params: CallParams<RandomnessBeaconArgs['obj']['createApplication(byte[32],uint64,uint64,uint64)void'] | RandomnessBeaconArgs['tuple']['createApplication(byte[32],uint64,uint64,uint64)void']> & AppClientCompilationParams & {onComplete?: OnApplicationComplete.NoOpOC}): AppClientMethodCallParams & AppClientCompilationParams & {onComplete?: OnApplicationComplete.NoOpOC} {
         return {
           ...params,
-          method: 'createApplication(byte[32])void' as const,
-          args: Array.isArray(params.args) ? params.args : [params.args.publicKey],
+          method: 'createApplication(byte[32],uint64,uint64,uint64)void' as const,
+          args: Array.isArray(params.args) ? params.args : [params.args.publicKey, params.args.maxPendingRequests, params.args.maxFutureRounds, params.args.staleRequestTimeout],
         }
       },
     }
@@ -804,8 +427,8 @@ export abstract class RandomnessBeaconParamsFactory {
    */
   static get update() {
     return {
-      _resolveByMethod<TParams extends RandomnessBeaconUpdateCallParams & { method: string }>(params: TParams) {
-        switch (params.method) {
+      _resolveByMethod<TParams extends RandomnessBeaconUpdateCallParams & {method: string}>(params: TParams) {
+        switch(params.method) {
           case 'updateApplication':
           case 'updateApplication()void':
             return RandomnessBeaconParamsFactory.update.updateApplication(params)
@@ -819,13 +442,7 @@ export abstract class RandomnessBeaconParamsFactory {
        * @param params Parameters for the call
        * @returns An `AppClientMethodCallParams` object for the call
        */
-      updateApplication(
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['updateApplication()void']
-          | RandomnessBeaconArgs['tuple']['updateApplication()void']
-        > &
-          AppClientCompilationParams,
-      ): AppClientMethodCallParams & AppClientCompilationParams {
+      updateApplication(params: CallParams<RandomnessBeaconArgs['obj']['updateApplication()void'] | RandomnessBeaconArgs['tuple']['updateApplication()void']> & AppClientCompilationParams): AppClientMethodCallParams & AppClientCompilationParams {
         return {
           ...params,
           method: 'updateApplication()void' as const,
@@ -840,8 +457,8 @@ export abstract class RandomnessBeaconParamsFactory {
    */
   static get delete() {
     return {
-      _resolveByMethod<TParams extends RandomnessBeaconDeleteCallParams & { method: string }>(params: TParams) {
-        switch (params.method) {
+      _resolveByMethod<TParams extends RandomnessBeaconDeleteCallParams & {method: string}>(params: TParams) {
+        switch(params.method) {
           case 'deleteApplication':
           case 'deleteApplication()void':
             return RandomnessBeaconParamsFactory.delete.deleteApplication(params)
@@ -855,12 +472,7 @@ export abstract class RandomnessBeaconParamsFactory {
        * @param params Parameters for the call
        * @returns An `AppClientMethodCallParams` object for the call
        */
-      deleteApplication(
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['deleteApplication()void']
-          | RandomnessBeaconArgs['tuple']['deleteApplication()void']
-        >,
-      ): AppClientMethodCallParams {
+      deleteApplication(params: CallParams<RandomnessBeaconArgs['obj']['deleteApplication()void'] | RandomnessBeaconArgs['tuple']['deleteApplication()void']>): AppClientMethodCallParams {
         return {
           ...params,
           method: 'deleteApplication()void' as const,
@@ -876,19 +488,11 @@ export abstract class RandomnessBeaconParamsFactory {
    * @param params Parameters for the call
    * @returns An `AppClientMethodCallParams` object for the call
    */
-  static createRequest(
-    params: CallParams<
-      | RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64']
-      | RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']
-    > &
-      CallOnComplete,
-  ): AppClientMethodCallParams & CallOnComplete {
+  static createRequest(params: CallParams<RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64'] | RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']> & CallOnComplete): AppClientMethodCallParams & CallOnComplete {
     return {
       ...params,
       method: 'createRequest(address,uint64,pay)uint64' as const,
-      args: Array.isArray(params.args)
-        ? params.args
-        : [params.args.requesterAddress, params.args.round, params.args.costsPayment],
+      args: Array.isArray(params.args) ? params.args : [params.args.requesterAddress, params.args.round, params.args.costsPayment],
     }
   }
   /**
@@ -897,13 +501,7 @@ export abstract class RandomnessBeaconParamsFactory {
    * @param params Parameters for the call
    * @returns An `AppClientMethodCallParams` object for the call
    */
-  static cancelRequest(
-    params: CallParams<
-      | RandomnessBeaconArgs['obj']['cancelRequest(uint64)void']
-      | RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']
-    > &
-      CallOnComplete,
-  ): AppClientMethodCallParams & CallOnComplete {
+  static cancelRequest(params: CallParams<RandomnessBeaconArgs['obj']['cancelRequest(uint64)void'] | RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']> & CallOnComplete): AppClientMethodCallParams & CallOnComplete {
     return {
       ...params,
       method: 'cancelRequest(uint64)void' as const,
@@ -916,13 +514,7 @@ export abstract class RandomnessBeaconParamsFactory {
    * @param params Parameters for the call
    * @returns An `AppClientMethodCallParams` object for the call
    */
-  static completeRequest(
-    params: CallParams<
-      | RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void']
-      | RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']
-    > &
-      CallOnComplete,
-  ): AppClientMethodCallParams & CallOnComplete {
+  static completeRequest(params: CallParams<RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void'] | RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']> & CallOnComplete): AppClientMethodCallParams & CallOnComplete {
     return {
       ...params,
       method: 'completeRequest(uint64,byte[80])void' as const,
@@ -939,13 +531,7 @@ export abstract class RandomnessBeaconParamsFactory {
    * @param params Parameters for the call
    * @returns An `AppClientMethodCallParams` object for the call
    */
-  static getCosts(
-    params: CallParams<
-      | RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)']
-      | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']
-    > &
-      CallOnComplete,
-  ): AppClientMethodCallParams & CallOnComplete {
+  static getCosts(params: CallParams<RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)'] | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']> & CallOnComplete): AppClientMethodCallParams & CallOnComplete {
     return {
       ...params,
       method: 'getCosts()(uint64,uint64)' as const,
@@ -960,13 +546,7 @@ export abstract class RandomnessBeaconParamsFactory {
    * @param params Parameters for the call
    * @returns An `AppClientMethodCallParams` object for the call
    */
-  static updateManager(
-    params: CallParams<
-      | RandomnessBeaconArgs['obj']['updateManager(address)void']
-      | RandomnessBeaconArgs['tuple']['updateManager(address)void']
-    > &
-      CallOnComplete,
-  ): AppClientMethodCallParams & CallOnComplete {
+  static updateManager(params: CallParams<RandomnessBeaconArgs['obj']['updateManager(address)void'] | RandomnessBeaconArgs['tuple']['updateManager(address)void']> & CallOnComplete): AppClientMethodCallParams & CallOnComplete {
     return {
       ...params,
       method: 'updateManager(address)void' as const,
@@ -981,12 +561,7 @@ export abstract class RandomnessBeaconParamsFactory {
    * @param params Parameters for the call
    * @returns An `AppClientMethodCallParams` object for the call
    */
-  static deleteManager(
-    params: CallParams<
-      RandomnessBeaconArgs['obj']['deleteManager()void'] | RandomnessBeaconArgs['tuple']['deleteManager()void']
-    > &
-      CallOnComplete,
-  ): AppClientMethodCallParams & CallOnComplete {
+  static deleteManager(params: CallParams<RandomnessBeaconArgs['obj']['deleteManager()void'] | RandomnessBeaconArgs['tuple']['deleteManager()void']> & CallOnComplete): AppClientMethodCallParams & CallOnComplete {
     return {
       ...params,
       method: 'deleteManager()void' as const,
@@ -1001,12 +576,7 @@ export abstract class RandomnessBeaconParamsFactory {
    * @param params Parameters for the call
    * @returns An `AppClientMethodCallParams` object for the call
    */
-  static manager(
-    params: CallParams<
-      RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']
-    > &
-      CallOnComplete,
-  ): AppClientMethodCallParams & CallOnComplete {
+  static manager(params: CallParams<RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']> & CallOnComplete): AppClientMethodCallParams & CallOnComplete {
     return {
       ...params,
       method: 'manager()address' as const,
@@ -1019,10 +589,7 @@ export abstract class RandomnessBeaconParamsFactory {
    * @param params Parameters for the call
    * @returns An `AppClientMethodCallParams` object for the call
    */
-  static pause(
-    params: CallParams<RandomnessBeaconArgs['obj']['pause()void'] | RandomnessBeaconArgs['tuple']['pause()void']> &
-      CallOnComplete,
-  ): AppClientMethodCallParams & CallOnComplete {
+  static pause(params: CallParams<RandomnessBeaconArgs['obj']['pause()void'] | RandomnessBeaconArgs['tuple']['pause()void']> & CallOnComplete): AppClientMethodCallParams & CallOnComplete {
     return {
       ...params,
       method: 'pause()void' as const,
@@ -1035,10 +602,7 @@ export abstract class RandomnessBeaconParamsFactory {
    * @param params Parameters for the call
    * @returns An `AppClientMethodCallParams` object for the call
    */
-  static unpause(
-    params: CallParams<RandomnessBeaconArgs['obj']['unpause()void'] | RandomnessBeaconArgs['tuple']['unpause()void']> &
-      CallOnComplete,
-  ): AppClientMethodCallParams & CallOnComplete {
+  static unpause(params: CallParams<RandomnessBeaconArgs['obj']['unpause()void'] | RandomnessBeaconArgs['tuple']['unpause()void']> & CallOnComplete): AppClientMethodCallParams & CallOnComplete {
     return {
       ...params,
       method: 'unpause()void' as const,
@@ -1051,13 +615,7 @@ export abstract class RandomnessBeaconParamsFactory {
    * @param params Parameters for the call
    * @returns An `AppClientMethodCallParams` object for the call
    */
-  static updatePauser(
-    params: CallParams<
-      | RandomnessBeaconArgs['obj']['updatePauser(address)void']
-      | RandomnessBeaconArgs['tuple']['updatePauser(address)void']
-    > &
-      CallOnComplete,
-  ): AppClientMethodCallParams & CallOnComplete {
+  static updatePauser(params: CallParams<RandomnessBeaconArgs['obj']['updatePauser(address)void'] | RandomnessBeaconArgs['tuple']['updatePauser(address)void']> & CallOnComplete): AppClientMethodCallParams & CallOnComplete {
     return {
       ...params,
       method: 'updatePauser(address)void' as const,
@@ -1072,12 +630,7 @@ export abstract class RandomnessBeaconParamsFactory {
    * @param params Parameters for the call
    * @returns An `AppClientMethodCallParams` object for the call
    */
-  static pauser(
-    params: CallParams<
-      RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']
-    > &
-      CallOnComplete,
-  ): AppClientMethodCallParams & CallOnComplete {
+  static pauser(params: CallParams<RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']> & CallOnComplete): AppClientMethodCallParams & CallOnComplete {
     return {
       ...params,
       method: 'pauser()address' as const,
@@ -1143,7 +696,9 @@ export class RandomnessBeaconFactory {
    * @param params The parameters to create the app client
    * @returns The `AppClient`
    */
-  public async getAppClientByCreatorAndName(params: AppFactoryResolveAppClientByCreatorAndNameParams) {
+  public async getAppClientByCreatorAndName(
+    params: AppFactoryResolveAppClientByCreatorAndNameParams,
+  ) {
     return new RandomnessBeaconClient(await this.appFactory.getAppClientByCreatorAndName(params))
   }
 
@@ -1156,21 +711,9 @@ export class RandomnessBeaconFactory {
   public async deploy(params: RandomnessBeaconDeployParams = {}) {
     const result = await this.appFactory.deploy({
       ...params,
-      createParams: params.createParams?.method
-        ? RandomnessBeaconParamsFactory.create._resolveByMethod(params.createParams)
-        : params.createParams
-          ? (params.createParams as RandomnessBeaconCreateCallParams & { args: Uint8Array[] })
-          : undefined,
-      updateParams: params.updateParams?.method
-        ? RandomnessBeaconParamsFactory.update._resolveByMethod(params.updateParams)
-        : params.updateParams
-          ? (params.updateParams as RandomnessBeaconUpdateCallParams & { args: Uint8Array[] })
-          : undefined,
-      deleteParams: params.deleteParams?.method
-        ? RandomnessBeaconParamsFactory.delete._resolveByMethod(params.deleteParams)
-        : params.deleteParams
-          ? (params.deleteParams as RandomnessBeaconDeleteCallParams & { args: Uint8Array[] })
-          : undefined,
+      createParams: params.createParams?.method ? RandomnessBeaconParamsFactory.create._resolveByMethod(params.createParams) : params.createParams ? params.createParams as (RandomnessBeaconCreateCallParams & { args: Uint8Array[] }) : undefined,
+      updateParams: params.updateParams?.method ? RandomnessBeaconParamsFactory.update._resolveByMethod(params.updateParams) : params.updateParams ? params.updateParams as (RandomnessBeaconUpdateCallParams & { args: Uint8Array[] }) : undefined,
+      deleteParams: params.deleteParams?.method ? RandomnessBeaconParamsFactory.delete._resolveByMethod(params.deleteParams) : params.deleteParams ? params.deleteParams as (RandomnessBeaconDeleteCallParams & { args: Uint8Array[] }) : undefined,
     })
     return { result: result.result, appClient: new RandomnessBeaconClient(result.appClient) }
   }
@@ -1184,19 +727,14 @@ export class RandomnessBeaconFactory {
      */
     create: {
       /**
-       * Creates a new instance of the RandomnessBeacon smart contract using the createApplication(byte[32])void ABI method.
+       * Creates a new instance of the RandomnessBeacon smart contract using the createApplication(byte[32],uint64,uint64,uint64)void ABI method.
+       *
+       * Called upon application creation
        *
        * @param params The params for the smart contract call
        * @returns The create params
        */
-      createApplication: (
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['createApplication(byte[32])void']
-          | RandomnessBeaconArgs['tuple']['createApplication(byte[32])void']
-        > &
-          AppClientCompilationParams &
-          CreateSchema & { onComplete?: OnApplicationComplete.NoOpOC },
-      ) => {
+      createApplication: (params: CallParams<RandomnessBeaconArgs['obj']['createApplication(byte[32],uint64,uint64,uint64)void'] | RandomnessBeaconArgs['tuple']['createApplication(byte[32],uint64,uint64,uint64)void']> & AppClientCompilationParams & CreateSchema & {onComplete?: OnApplicationComplete.NoOpOC}) => {
         return this.appFactory.params.create(RandomnessBeaconParamsFactory.create.createApplication(params))
       },
     },
@@ -1211,13 +749,7 @@ export class RandomnessBeaconFactory {
        * @param params The params for the smart contract call
        * @returns The deployUpdate params
        */
-      updateApplication: (
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['updateApplication()void']
-          | RandomnessBeaconArgs['tuple']['updateApplication()void']
-        > &
-          AppClientCompilationParams = { args: [] },
-      ) => {
+      updateApplication: (params: CallParams<RandomnessBeaconArgs['obj']['updateApplication()void'] | RandomnessBeaconArgs['tuple']['updateApplication()void']> & AppClientCompilationParams = {args: []}) => {
         return this.appFactory.params.deployUpdate(RandomnessBeaconParamsFactory.update.updateApplication(params))
       },
     },
@@ -1232,15 +764,11 @@ export class RandomnessBeaconFactory {
        * @param params The params for the smart contract call
        * @returns The deployDelete params
        */
-      deleteApplication: (
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['deleteApplication()void']
-          | RandomnessBeaconArgs['tuple']['deleteApplication()void']
-        > = { args: [] },
-      ) => {
+      deleteApplication: (params: CallParams<RandomnessBeaconArgs['obj']['deleteApplication()void'] | RandomnessBeaconArgs['tuple']['deleteApplication()void']> = {args: []}) => {
         return this.appFactory.params.deployDelete(RandomnessBeaconParamsFactory.delete.deleteApplication(params))
       },
     },
+
   }
 
   /**
@@ -1252,22 +780,18 @@ export class RandomnessBeaconFactory {
      */
     create: {
       /**
-       * Creates a new instance of the RandomnessBeacon smart contract using the createApplication(byte[32])void ABI method.
+       * Creates a new instance of the RandomnessBeacon smart contract using the createApplication(byte[32],uint64,uint64,uint64)void ABI method.
+       *
+       * Called upon application creation
        *
        * @param params The params for the smart contract call
        * @returns The create transaction
        */
-      createApplication: (
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['createApplication(byte[32])void']
-          | RandomnessBeaconArgs['tuple']['createApplication(byte[32])void']
-        > &
-          AppClientCompilationParams &
-          CreateSchema & { onComplete?: OnApplicationComplete.NoOpOC },
-      ) => {
+      createApplication: (params: CallParams<RandomnessBeaconArgs['obj']['createApplication(byte[32],uint64,uint64,uint64)void'] | RandomnessBeaconArgs['tuple']['createApplication(byte[32],uint64,uint64,uint64)void']> & AppClientCompilationParams & CreateSchema & {onComplete?: OnApplicationComplete.NoOpOC}) => {
         return this.appFactory.createTransaction.create(RandomnessBeaconParamsFactory.create.createApplication(params))
       },
     },
+
   }
 
   /**
@@ -1279,33 +803,21 @@ export class RandomnessBeaconFactory {
      */
     create: {
       /**
-       * Creates a new instance of the RandomnessBeacon smart contract using an ABI method call using the createApplication(byte[32])void ABI method.
+       * Creates a new instance of the RandomnessBeacon smart contract using an ABI method call using the createApplication(byte[32],uint64,uint64,uint64)void ABI method.
+       *
+       * Called upon application creation
        *
        * @param params The params for the smart contract call
        * @returns The create result
        */
-      createApplication: async (
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['createApplication(byte[32])void']
-          | RandomnessBeaconArgs['tuple']['createApplication(byte[32])void']
-        > &
-          AppClientCompilationParams &
-          CreateSchema &
-          SendParams & { onComplete?: OnApplicationComplete.NoOpOC },
-      ) => {
+      createApplication: async (params: CallParams<RandomnessBeaconArgs['obj']['createApplication(byte[32],uint64,uint64,uint64)void'] | RandomnessBeaconArgs['tuple']['createApplication(byte[32],uint64,uint64,uint64)void']> & AppClientCompilationParams & CreateSchema & SendParams & {onComplete?: OnApplicationComplete.NoOpOC}) => {
         const result = await this.appFactory.send.create(RandomnessBeaconParamsFactory.create.createApplication(params))
-        return {
-          result: {
-            ...result.result,
-            return: result.result.return as unknown as
-              | undefined
-              | RandomnessBeaconReturns['createApplication(byte[32])void'],
-          },
-          appClient: new RandomnessBeaconClient(result.appClient),
-        }
+        return { result: { ...result.result, return: result.result.return as unknown as (undefined | RandomnessBeaconReturns['createApplication(byte[32],uint64,uint64,uint64)void']) }, appClient: new RandomnessBeaconClient(result.appClient) }
       },
     },
+
   }
+
 }
 /**
  * A client to make calls to the RandomnessBeacon smart contract
@@ -1329,30 +841,18 @@ export class RandomnessBeaconClient {
    */
   constructor(params: Omit<AppClientParams, 'appSpec'>)
   constructor(appClientOrParams: _AppClient | Omit<AppClientParams, 'appSpec'>) {
-    this.appClient =
-      appClientOrParams instanceof _AppClient
-        ? appClientOrParams
-        : new _AppClient({
-            ...appClientOrParams,
-            appSpec: APP_SPEC,
-          })
+    this.appClient = appClientOrParams instanceof _AppClient ? appClientOrParams : new _AppClient({
+      ...appClientOrParams,
+      appSpec: APP_SPEC,
+    })
   }
 
   /**
    * Checks for decode errors on the given return value and maps the return value to the return type for the given method
    * @returns The typed return value or undefined if there was no value
    */
-  decodeReturnValue<TSignature extends RandomnessBeaconNonVoidMethodSignatures>(
-    method: TSignature,
-    returnValue: ABIReturn | undefined,
-  ) {
-    return returnValue !== undefined
-      ? getArc56ReturnValue<MethodReturn<TSignature>>(
-          returnValue,
-          this.appClient.getABIMethod(method),
-          APP_SPEC.structs,
-        )
-      : undefined
+  decodeReturnValue<TSignature extends RandomnessBeaconNonVoidMethodSignatures>(method: TSignature, returnValue: ABIReturn | undefined) {
+    return returnValue !== undefined ? getArc56ReturnValue<MethodReturn<TSignature>>(returnValue, this.appClient.getABIMethod(method), APP_SPEC.structs) : undefined
   }
 
   /**
@@ -1360,10 +860,8 @@ export class RandomnessBeaconClient {
    * using AlgoKit app deployment semantics (i.e. looking for the app creation transaction note).
    * @param params The parameters to create the app client
    */
-  public static async fromCreatorAndName(
-    params: Omit<ResolveAppClientByCreatorAndName, 'appSpec'>,
-  ): Promise<RandomnessBeaconClient> {
-    return new RandomnessBeaconClient(await _AppClient.fromCreatorAndName({ ...params, appSpec: APP_SPEC }))
+  public static async fromCreatorAndName(params: Omit<ResolveAppClientByCreatorAndName, 'appSpec'>): Promise<RandomnessBeaconClient> {
+    return new RandomnessBeaconClient(await _AppClient.fromCreatorAndName({...params, appSpec: APP_SPEC}))
   }
 
   /**
@@ -1373,8 +871,10 @@ export class RandomnessBeaconClient {
    * If no IDs are in the app spec or the network isn't recognised, an error is thrown.
    * @param params The parameters to create the app client
    */
-  static async fromNetwork(params: Omit<ResolveAppClientByNetwork, 'appSpec'>): Promise<RandomnessBeaconClient> {
-    return new RandomnessBeaconClient(await _AppClient.fromNetwork({ ...params, appSpec: APP_SPEC }))
+  static async fromNetwork(
+    params: Omit<ResolveAppClientByNetwork, 'appSpec'>
+  ): Promise<RandomnessBeaconClient> {
+    return new RandomnessBeaconClient(await _AppClient.fromNetwork({...params, appSpec: APP_SPEC}))
   }
 
   /** The ID of the app instance this client is linked to. */
@@ -1416,15 +916,10 @@ export class RandomnessBeaconClient {
        * @param params The params for the smart contract call
        * @returns The update params
        */
-      updateApplication: (
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['updateApplication()void']
-          | RandomnessBeaconArgs['tuple']['updateApplication()void']
-        > &
-          AppClientCompilationParams = { args: [] },
-      ) => {
+      updateApplication: (params: CallParams<RandomnessBeaconArgs['obj']['updateApplication()void'] | RandomnessBeaconArgs['tuple']['updateApplication()void']> & AppClientCompilationParams = {args: []}) => {
         return this.appClient.params.update(RandomnessBeaconParamsFactory.update.updateApplication(params))
       },
+
     },
 
     /**
@@ -1437,14 +932,10 @@ export class RandomnessBeaconClient {
        * @param params The params for the smart contract call
        * @returns The delete params
        */
-      deleteApplication: (
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['deleteApplication()void']
-          | RandomnessBeaconArgs['tuple']['deleteApplication()void']
-        > = { args: [] },
-      ) => {
+      deleteApplication: (params: CallParams<RandomnessBeaconArgs['obj']['deleteApplication()void'] | RandomnessBeaconArgs['tuple']['deleteApplication()void']> = {args: []}) => {
         return this.appClient.params.delete(RandomnessBeaconParamsFactory.delete.deleteApplication(params))
       },
+
     },
 
     /**
@@ -1463,12 +954,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call params: a unique request ID to be used to identify the request
      */
-    createRequest: (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64']
-        | RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']
-      > & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    createRequest: (params: CallParams<RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64'] | RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']> & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       return this.appClient.params.call(RandomnessBeaconParamsFactory.createRequest(params))
     },
 
@@ -1478,12 +964,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call params
      */
-    cancelRequest: (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['cancelRequest(uint64)void']
-        | RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']
-      > & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    cancelRequest: (params: CallParams<RandomnessBeaconArgs['obj']['cancelRequest(uint64)void'] | RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']> & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       return this.appClient.params.call(RandomnessBeaconParamsFactory.cancelRequest(params))
     },
 
@@ -1493,12 +974,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call params
      */
-    completeRequest: (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void']
-        | RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']
-      > & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    completeRequest: (params: CallParams<RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void'] | RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']> & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       return this.appClient.params.call(RandomnessBeaconParamsFactory.completeRequest(params))
     },
 
@@ -1514,12 +990,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call params: arc4.Tuple<[txnFees, boxCost] - tuple of the required txn fees and box cost (that will be refunded)
      */
-    getCosts: (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)']
-        | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']
-      > & { onComplete?: OnApplicationComplete.NoOpOC } = { args: [] },
-    ) => {
+    getCosts: (params: CallParams<RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)'] | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']> & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       return this.appClient.params.call(RandomnessBeaconParamsFactory.getCosts(params))
     },
 
@@ -1531,12 +1002,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call params
      */
-    updateManager: (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['updateManager(address)void']
-        | RandomnessBeaconArgs['tuple']['updateManager(address)void']
-      > & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    updateManager: (params: CallParams<RandomnessBeaconArgs['obj']['updateManager(address)void'] | RandomnessBeaconArgs['tuple']['updateManager(address)void']> & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       return this.appClient.params.call(RandomnessBeaconParamsFactory.updateManager(params))
     },
 
@@ -1548,13 +1014,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call params
      */
-    deleteManager: (
-      params: CallParams<
-        RandomnessBeaconArgs['obj']['deleteManager()void'] | RandomnessBeaconArgs['tuple']['deleteManager()void']
-      > & {
-        onComplete?: OnApplicationComplete.NoOpOC
-      } = { args: [] },
-    ) => {
+    deleteManager: (params: CallParams<RandomnessBeaconArgs['obj']['deleteManager()void'] | RandomnessBeaconArgs['tuple']['deleteManager()void']> & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       return this.appClient.params.call(RandomnessBeaconParamsFactory.deleteManager(params))
     },
 
@@ -1568,13 +1028,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call params: The current manager of this contract
      */
-    manager: (
-      params: CallParams<
-        RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']
-      > & {
-        onComplete?: OnApplicationComplete.NoOpOC
-      } = { args: [] },
-    ) => {
+    manager: (params: CallParams<RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']> & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       return this.appClient.params.call(RandomnessBeaconParamsFactory.manager(params))
     },
 
@@ -1584,11 +1038,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call params
      */
-    pause: (
-      params: CallParams<RandomnessBeaconArgs['obj']['pause()void'] | RandomnessBeaconArgs['tuple']['pause()void']> & {
-        onComplete?: OnApplicationComplete.NoOpOC
-      } = { args: [] },
-    ) => {
+    pause: (params: CallParams<RandomnessBeaconArgs['obj']['pause()void'] | RandomnessBeaconArgs['tuple']['pause()void']> & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       return this.appClient.params.call(RandomnessBeaconParamsFactory.pause(params))
     },
 
@@ -1598,13 +1048,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call params
      */
-    unpause: (
-      params: CallParams<
-        RandomnessBeaconArgs['obj']['unpause()void'] | RandomnessBeaconArgs['tuple']['unpause()void']
-      > & {
-        onComplete?: OnApplicationComplete.NoOpOC
-      } = { args: [] },
-    ) => {
+    unpause: (params: CallParams<RandomnessBeaconArgs['obj']['unpause()void'] | RandomnessBeaconArgs['tuple']['unpause()void']> & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       return this.appClient.params.call(RandomnessBeaconParamsFactory.unpause(params))
     },
 
@@ -1614,12 +1058,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call params
      */
-    updatePauser: (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['updatePauser(address)void']
-        | RandomnessBeaconArgs['tuple']['updatePauser(address)void']
-      > & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    updatePauser: (params: CallParams<RandomnessBeaconArgs['obj']['updatePauser(address)void'] | RandomnessBeaconArgs['tuple']['updatePauser(address)void']> & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       return this.appClient.params.call(RandomnessBeaconParamsFactory.updatePauser(params))
     },
 
@@ -1633,15 +1072,10 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call params: The current pauser
      */
-    pauser: (
-      params: CallParams<
-        RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']
-      > & {
-        onComplete?: OnApplicationComplete.NoOpOC
-      } = { args: [] },
-    ) => {
+    pauser: (params: CallParams<RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']> & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       return this.appClient.params.call(RandomnessBeaconParamsFactory.pauser(params))
     },
+
   }
 
   /**
@@ -1658,15 +1092,10 @@ export class RandomnessBeaconClient {
        * @param params The params for the smart contract call
        * @returns The update transaction
        */
-      updateApplication: (
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['updateApplication()void']
-          | RandomnessBeaconArgs['tuple']['updateApplication()void']
-        > &
-          AppClientCompilationParams = { args: [] },
-      ) => {
+      updateApplication: (params: CallParams<RandomnessBeaconArgs['obj']['updateApplication()void'] | RandomnessBeaconArgs['tuple']['updateApplication()void']> & AppClientCompilationParams = {args: []}) => {
         return this.appClient.createTransaction.update(RandomnessBeaconParamsFactory.update.updateApplication(params))
       },
+
     },
 
     /**
@@ -1679,14 +1108,10 @@ export class RandomnessBeaconClient {
        * @param params The params for the smart contract call
        * @returns The delete transaction
        */
-      deleteApplication: (
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['deleteApplication()void']
-          | RandomnessBeaconArgs['tuple']['deleteApplication()void']
-        > = { args: [] },
-      ) => {
+      deleteApplication: (params: CallParams<RandomnessBeaconArgs['obj']['deleteApplication()void'] | RandomnessBeaconArgs['tuple']['deleteApplication()void']> = {args: []}) => {
         return this.appClient.createTransaction.delete(RandomnessBeaconParamsFactory.delete.deleteApplication(params))
       },
+
     },
 
     /**
@@ -1705,12 +1130,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call transaction: a unique request ID to be used to identify the request
      */
-    createRequest: (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64']
-        | RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']
-      > & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    createRequest: (params: CallParams<RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64'] | RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']> & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       return this.appClient.createTransaction.call(RandomnessBeaconParamsFactory.createRequest(params))
     },
 
@@ -1720,12 +1140,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call transaction
      */
-    cancelRequest: (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['cancelRequest(uint64)void']
-        | RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']
-      > & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    cancelRequest: (params: CallParams<RandomnessBeaconArgs['obj']['cancelRequest(uint64)void'] | RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']> & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       return this.appClient.createTransaction.call(RandomnessBeaconParamsFactory.cancelRequest(params))
     },
 
@@ -1735,12 +1150,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call transaction
      */
-    completeRequest: (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void']
-        | RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']
-      > & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    completeRequest: (params: CallParams<RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void'] | RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']> & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       return this.appClient.createTransaction.call(RandomnessBeaconParamsFactory.completeRequest(params))
     },
 
@@ -1756,12 +1166,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call transaction: arc4.Tuple<[txnFees, boxCost] - tuple of the required txn fees and box cost (that will be refunded)
      */
-    getCosts: (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)']
-        | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']
-      > & { onComplete?: OnApplicationComplete.NoOpOC } = { args: [] },
-    ) => {
+    getCosts: (params: CallParams<RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)'] | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']> & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       return this.appClient.createTransaction.call(RandomnessBeaconParamsFactory.getCosts(params))
     },
 
@@ -1773,12 +1178,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call transaction
      */
-    updateManager: (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['updateManager(address)void']
-        | RandomnessBeaconArgs['tuple']['updateManager(address)void']
-      > & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    updateManager: (params: CallParams<RandomnessBeaconArgs['obj']['updateManager(address)void'] | RandomnessBeaconArgs['tuple']['updateManager(address)void']> & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       return this.appClient.createTransaction.call(RandomnessBeaconParamsFactory.updateManager(params))
     },
 
@@ -1790,13 +1190,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call transaction
      */
-    deleteManager: (
-      params: CallParams<
-        RandomnessBeaconArgs['obj']['deleteManager()void'] | RandomnessBeaconArgs['tuple']['deleteManager()void']
-      > & {
-        onComplete?: OnApplicationComplete.NoOpOC
-      } = { args: [] },
-    ) => {
+    deleteManager: (params: CallParams<RandomnessBeaconArgs['obj']['deleteManager()void'] | RandomnessBeaconArgs['tuple']['deleteManager()void']> & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       return this.appClient.createTransaction.call(RandomnessBeaconParamsFactory.deleteManager(params))
     },
 
@@ -1810,13 +1204,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call transaction: The current manager of this contract
      */
-    manager: (
-      params: CallParams<
-        RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']
-      > & {
-        onComplete?: OnApplicationComplete.NoOpOC
-      } = { args: [] },
-    ) => {
+    manager: (params: CallParams<RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']> & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       return this.appClient.createTransaction.call(RandomnessBeaconParamsFactory.manager(params))
     },
 
@@ -1826,11 +1214,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call transaction
      */
-    pause: (
-      params: CallParams<RandomnessBeaconArgs['obj']['pause()void'] | RandomnessBeaconArgs['tuple']['pause()void']> & {
-        onComplete?: OnApplicationComplete.NoOpOC
-      } = { args: [] },
-    ) => {
+    pause: (params: CallParams<RandomnessBeaconArgs['obj']['pause()void'] | RandomnessBeaconArgs['tuple']['pause()void']> & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       return this.appClient.createTransaction.call(RandomnessBeaconParamsFactory.pause(params))
     },
 
@@ -1840,13 +1224,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call transaction
      */
-    unpause: (
-      params: CallParams<
-        RandomnessBeaconArgs['obj']['unpause()void'] | RandomnessBeaconArgs['tuple']['unpause()void']
-      > & {
-        onComplete?: OnApplicationComplete.NoOpOC
-      } = { args: [] },
-    ) => {
+    unpause: (params: CallParams<RandomnessBeaconArgs['obj']['unpause()void'] | RandomnessBeaconArgs['tuple']['unpause()void']> & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       return this.appClient.createTransaction.call(RandomnessBeaconParamsFactory.unpause(params))
     },
 
@@ -1856,12 +1234,7 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call transaction
      */
-    updatePauser: (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['updatePauser(address)void']
-        | RandomnessBeaconArgs['tuple']['updatePauser(address)void']
-      > & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    updatePauser: (params: CallParams<RandomnessBeaconArgs['obj']['updatePauser(address)void'] | RandomnessBeaconArgs['tuple']['updatePauser(address)void']> & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       return this.appClient.createTransaction.call(RandomnessBeaconParamsFactory.updatePauser(params))
     },
 
@@ -1875,15 +1248,10 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call transaction: The current pauser
      */
-    pauser: (
-      params: CallParams<
-        RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']
-      > & {
-        onComplete?: OnApplicationComplete.NoOpOC
-      } = { args: [] },
-    ) => {
+    pauser: (params: CallParams<RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']> & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       return this.appClient.createTransaction.call(RandomnessBeaconParamsFactory.pauser(params))
     },
+
   }
 
   /**
@@ -1900,20 +1268,11 @@ export class RandomnessBeaconClient {
        * @param params The params for the smart contract call
        * @returns The update result
        */
-      updateApplication: async (
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['updateApplication()void']
-          | RandomnessBeaconArgs['tuple']['updateApplication()void']
-        > &
-          AppClientCompilationParams &
-          SendParams = { args: [] },
-      ) => {
+      updateApplication: async (params: CallParams<RandomnessBeaconArgs['obj']['updateApplication()void'] | RandomnessBeaconArgs['tuple']['updateApplication()void']> & AppClientCompilationParams & SendParams = {args: []}) => {
         const result = await this.appClient.send.update(RandomnessBeaconParamsFactory.update.updateApplication(params))
-        return {
-          ...result,
-          return: result.return as unknown as undefined | RandomnessBeaconReturns['updateApplication()void'],
-        }
+        return {...result, return: result.return as unknown as (undefined | RandomnessBeaconReturns['updateApplication()void'])}
       },
+
     },
 
     /**
@@ -1926,19 +1285,11 @@ export class RandomnessBeaconClient {
        * @param params The params for the smart contract call
        * @returns The delete result
        */
-      deleteApplication: async (
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['deleteApplication()void']
-          | RandomnessBeaconArgs['tuple']['deleteApplication()void']
-        > &
-          SendParams = { args: [] },
-      ) => {
+      deleteApplication: async (params: CallParams<RandomnessBeaconArgs['obj']['deleteApplication()void'] | RandomnessBeaconArgs['tuple']['deleteApplication()void']> & SendParams = {args: []}) => {
         const result = await this.appClient.send.delete(RandomnessBeaconParamsFactory.delete.deleteApplication(params))
-        return {
-          ...result,
-          return: result.return as unknown as undefined | RandomnessBeaconReturns['deleteApplication()void'],
-        }
+        return {...result, return: result.return as unknown as (undefined | RandomnessBeaconReturns['deleteApplication()void'])}
       },
+
     },
 
     /**
@@ -1957,20 +1308,9 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call result: a unique request ID to be used to identify the request
      */
-    createRequest: async (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64']
-        | RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']
-      > &
-        SendParams & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    createRequest: async (params: CallParams<RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64'] | RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']> & SendParams & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.createRequest(params))
-      return {
-        ...result,
-        return: result.return as unknown as
-          | undefined
-          | RandomnessBeaconReturns['createRequest(address,uint64,pay)uint64'],
-      }
+      return {...result, return: result.return as unknown as (undefined | RandomnessBeaconReturns['createRequest(address,uint64,pay)uint64'])}
     },
 
     /**
@@ -1979,18 +1319,9 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call result
      */
-    cancelRequest: async (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['cancelRequest(uint64)void']
-        | RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']
-      > &
-        SendParams & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    cancelRequest: async (params: CallParams<RandomnessBeaconArgs['obj']['cancelRequest(uint64)void'] | RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']> & SendParams & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.cancelRequest(params))
-      return {
-        ...result,
-        return: result.return as unknown as undefined | RandomnessBeaconReturns['cancelRequest(uint64)void'],
-      }
+      return {...result, return: result.return as unknown as (undefined | RandomnessBeaconReturns['cancelRequest(uint64)void'])}
     },
 
     /**
@@ -1999,18 +1330,9 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call result
      */
-    completeRequest: async (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void']
-        | RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']
-      > &
-        SendParams & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    completeRequest: async (params: CallParams<RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void'] | RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']> & SendParams & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.completeRequest(params))
-      return {
-        ...result,
-        return: result.return as unknown as undefined | RandomnessBeaconReturns['completeRequest(uint64,byte[80])void'],
-      }
+      return {...result, return: result.return as unknown as (undefined | RandomnessBeaconReturns['completeRequest(uint64,byte[80])void'])}
     },
 
     /**
@@ -2025,18 +1347,9 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call result: arc4.Tuple<[txnFees, boxCost] - tuple of the required txn fees and box cost (that will be refunded)
      */
-    getCosts: async (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)']
-        | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']
-      > &
-        SendParams & { onComplete?: OnApplicationComplete.NoOpOC } = { args: [] },
-    ) => {
+    getCosts: async (params: CallParams<RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)'] | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']> & SendParams & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.getCosts(params))
-      return {
-        ...result,
-        return: result.return as unknown as undefined | RandomnessBeaconReturns['getCosts()(uint64,uint64)'],
-      }
+      return {...result, return: result.return as unknown as (undefined | RandomnessBeaconReturns['getCosts()(uint64,uint64)'])}
     },
 
     /**
@@ -2047,18 +1360,9 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call result
      */
-    updateManager: async (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['updateManager(address)void']
-        | RandomnessBeaconArgs['tuple']['updateManager(address)void']
-      > &
-        SendParams & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    updateManager: async (params: CallParams<RandomnessBeaconArgs['obj']['updateManager(address)void'] | RandomnessBeaconArgs['tuple']['updateManager(address)void']> & SendParams & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.updateManager(params))
-      return {
-        ...result,
-        return: result.return as unknown as undefined | RandomnessBeaconReturns['updateManager(address)void'],
-      }
+      return {...result, return: result.return as unknown as (undefined | RandomnessBeaconReturns['updateManager(address)void'])}
     },
 
     /**
@@ -2069,17 +1373,9 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call result
      */
-    deleteManager: async (
-      params: CallParams<
-        RandomnessBeaconArgs['obj']['deleteManager()void'] | RandomnessBeaconArgs['tuple']['deleteManager()void']
-      > &
-        SendParams & { onComplete?: OnApplicationComplete.NoOpOC } = { args: [] },
-    ) => {
+    deleteManager: async (params: CallParams<RandomnessBeaconArgs['obj']['deleteManager()void'] | RandomnessBeaconArgs['tuple']['deleteManager()void']> & SendParams & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.deleteManager(params))
-      return {
-        ...result,
-        return: result.return as unknown as undefined | RandomnessBeaconReturns['deleteManager()void'],
-      }
+      return {...result, return: result.return as unknown as (undefined | RandomnessBeaconReturns['deleteManager()void'])}
     },
 
     /**
@@ -2092,14 +1388,9 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call result: The current manager of this contract
      */
-    manager: async (
-      params: CallParams<
-        RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']
-      > &
-        SendParams & { onComplete?: OnApplicationComplete.NoOpOC } = { args: [] },
-    ) => {
+    manager: async (params: CallParams<RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']> & SendParams & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.manager(params))
-      return { ...result, return: result.return as unknown as undefined | RandomnessBeaconReturns['manager()address'] }
+      return {...result, return: result.return as unknown as (undefined | RandomnessBeaconReturns['manager()address'])}
     },
 
     /**
@@ -2108,12 +1399,9 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call result
      */
-    pause: async (
-      params: CallParams<RandomnessBeaconArgs['obj']['pause()void'] | RandomnessBeaconArgs['tuple']['pause()void']> &
-        SendParams & { onComplete?: OnApplicationComplete.NoOpOC } = { args: [] },
-    ) => {
+    pause: async (params: CallParams<RandomnessBeaconArgs['obj']['pause()void'] | RandomnessBeaconArgs['tuple']['pause()void']> & SendParams & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.pause(params))
-      return { ...result, return: result.return as unknown as undefined | RandomnessBeaconReturns['pause()void'] }
+      return {...result, return: result.return as unknown as (undefined | RandomnessBeaconReturns['pause()void'])}
     },
 
     /**
@@ -2122,14 +1410,9 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call result
      */
-    unpause: async (
-      params: CallParams<
-        RandomnessBeaconArgs['obj']['unpause()void'] | RandomnessBeaconArgs['tuple']['unpause()void']
-      > &
-        SendParams & { onComplete?: OnApplicationComplete.NoOpOC } = { args: [] },
-    ) => {
+    unpause: async (params: CallParams<RandomnessBeaconArgs['obj']['unpause()void'] | RandomnessBeaconArgs['tuple']['unpause()void']> & SendParams & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.unpause(params))
-      return { ...result, return: result.return as unknown as undefined | RandomnessBeaconReturns['unpause()void'] }
+      return {...result, return: result.return as unknown as (undefined | RandomnessBeaconReturns['unpause()void'])}
     },
 
     /**
@@ -2138,18 +1421,9 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call result
      */
-    updatePauser: async (
-      params: CallParams<
-        | RandomnessBeaconArgs['obj']['updatePauser(address)void']
-        | RandomnessBeaconArgs['tuple']['updatePauser(address)void']
-      > &
-        SendParams & { onComplete?: OnApplicationComplete.NoOpOC },
-    ) => {
+    updatePauser: async (params: CallParams<RandomnessBeaconArgs['obj']['updatePauser(address)void'] | RandomnessBeaconArgs['tuple']['updatePauser(address)void']> & SendParams & {onComplete?: OnApplicationComplete.NoOpOC}) => {
       const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.updatePauser(params))
-      return {
-        ...result,
-        return: result.return as unknown as undefined | RandomnessBeaconReturns['updatePauser(address)void'],
-      }
+      return {...result, return: result.return as unknown as (undefined | RandomnessBeaconReturns['updatePauser(address)void'])}
     },
 
     /**
@@ -2162,15 +1436,11 @@ export class RandomnessBeaconClient {
      * @param params The params for the smart contract call
      * @returns The call result: The current pauser
      */
-    pauser: async (
-      params: CallParams<
-        RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']
-      > &
-        SendParams & { onComplete?: OnApplicationComplete.NoOpOC } = { args: [] },
-    ) => {
+    pauser: async (params: CallParams<RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']> & SendParams & {onComplete?: OnApplicationComplete.NoOpOC} = {args: []}) => {
       const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.pauser(params))
-      return { ...result, return: result.return as unknown as undefined | RandomnessBeaconReturns['pauser()address'] }
+      return {...result, return: result.return as unknown as (undefined | RandomnessBeaconReturns['pauser()address'])}
     },
+
   }
 
   /**
@@ -2195,12 +1465,7 @@ export class RandomnessBeaconClient {
    * @param params The params for the smart contract call
    * @returns The call result: arc4.Tuple<[txnFees, boxCost] - tuple of the required txn fees and box cost (that will be refunded)
    */
-  async getCosts(
-    params: CallParams<
-      | RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)']
-      | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']
-    > = { args: [] },
-  ) {
+  async getCosts(params: CallParams<RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)'] | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']> = {args: []}) {
     const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.getCosts(params))
     return result.return as unknown as RandomnessBeaconReturns['getCosts()(uint64,uint64)']
   }
@@ -2215,11 +1480,7 @@ export class RandomnessBeaconClient {
    * @param params The params for the smart contract call
    * @returns The call result: The current manager of this contract
    */
-  async manager(
-    params: CallParams<
-      RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']
-    > = { args: [] },
-  ) {
+  async manager(params: CallParams<RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']> = {args: []}) {
     const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.manager(params))
     return result.return as unknown as RandomnessBeaconReturns['manager()address']
   }
@@ -2234,11 +1495,7 @@ export class RandomnessBeaconClient {
    * @param params The params for the smart contract call
    * @returns The call result: The current pauser
    */
-  async pauser(
-    params: CallParams<
-      RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']
-    > = { args: [] },
-  ) {
+  async pauser(params: CallParams<RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']> = {args: []}) {
     const result = await this.appClient.send.call(RandomnessBeaconParamsFactory.pauser(params))
     return result.return as unknown as RandomnessBeaconReturns['pauser()address']
   }
@@ -2258,7 +1515,10 @@ export class RandomnessBeaconClient {
         const result = await this.appClient.state.global.getAll()
         return {
           publicKey: result.publicKey,
-          currentRequestId: result.currentRequestId,
+          nextRequestId: result.nextRequestId,
+          maxFutureRounds: result.maxFutureRounds,
+          maxPendingRequests: result.maxPendingRequests,
+          staleRequestTimeout: result.staleRequestTimeout,
           totalPendingRequests: result.totalPendingRequests,
           _manager: result._manager,
           _pauser: result._pauser,
@@ -2268,39 +1528,39 @@ export class RandomnessBeaconClient {
       /**
        * Get the current value of the publicKey key in global state
        */
-      publicKey: async (): Promise<Uint8Array | undefined> => {
-        return (await this.appClient.state.global.getValue('publicKey')) as Uint8Array | undefined
-      },
+      publicKey: async (): Promise<Uint8Array | undefined> => { return (await this.appClient.state.global.getValue("publicKey")) as Uint8Array | undefined },
       /**
-       * Get the current value of the currentRequestId key in global state
+       * Get the current value of the nextRequestId key in global state
        */
-      currentRequestId: async (): Promise<bigint | undefined> => {
-        return (await this.appClient.state.global.getValue('currentRequestId')) as bigint | undefined
-      },
+      nextRequestId: async (): Promise<bigint | undefined> => { return (await this.appClient.state.global.getValue("nextRequestId")) as bigint | undefined },
+      /**
+       * Get the current value of the maxFutureRounds key in global state
+       */
+      maxFutureRounds: async (): Promise<bigint | undefined> => { return (await this.appClient.state.global.getValue("maxFutureRounds")) as bigint | undefined },
+      /**
+       * Get the current value of the maxPendingRequests key in global state
+       */
+      maxPendingRequests: async (): Promise<bigint | undefined> => { return (await this.appClient.state.global.getValue("maxPendingRequests")) as bigint | undefined },
+      /**
+       * Get the current value of the staleRequestTimeout key in global state
+       */
+      staleRequestTimeout: async (): Promise<bigint | undefined> => { return (await this.appClient.state.global.getValue("staleRequestTimeout")) as bigint | undefined },
       /**
        * Get the current value of the totalPendingRequests key in global state
        */
-      totalPendingRequests: async (): Promise<bigint | undefined> => {
-        return (await this.appClient.state.global.getValue('totalPendingRequests')) as bigint | undefined
-      },
+      totalPendingRequests: async (): Promise<bigint | undefined> => { return (await this.appClient.state.global.getValue("totalPendingRequests")) as bigint | undefined },
       /**
        * Get the current value of the _manager key in global state
        */
-      _manager: async (): Promise<string | undefined> => {
-        return (await this.appClient.state.global.getValue('_manager')) as string | undefined
-      },
+      _manager: async (): Promise<string | undefined> => { return (await this.appClient.state.global.getValue("_manager")) as string | undefined },
       /**
        * Get the current value of the _pauser key in global state
        */
-      _pauser: async (): Promise<string | undefined> => {
-        return (await this.appClient.state.global.getValue('_pauser')) as string | undefined
-      },
+      _pauser: async (): Promise<string | undefined> => { return (await this.appClient.state.global.getValue("_pauser")) as string | undefined },
       /**
        * Get the current value of the paused key in global state
        */
-      paused: async (): Promise<boolean | undefined> => {
-        return (await this.appClient.state.global.getValue('paused')) as boolean | undefined
-      },
+      paused: async (): Promise<boolean | undefined> => { return (await this.appClient.state.global.getValue("paused")) as boolean | undefined },
     },
     /**
      * Methods to access box state for the current RandomnessBeacon app
@@ -2311,7 +1571,8 @@ export class RandomnessBeaconClient {
        */
       getAll: async (): Promise<Partial<Expand<BoxKeysState>>> => {
         const result = await this.appClient.state.box.getAll()
-        return {}
+        return {
+        }
       },
       /**
        * Get values from the requests map in box state
@@ -2320,15 +1581,11 @@ export class RandomnessBeaconClient {
         /**
          * Get all current values of the requests map in box state
          */
-        getMap: async (): Promise<Map<bigint, RandomnessRequest>> => {
-          return (await this.appClient.state.box.getMap('requests')) as Map<bigint, RandomnessRequest>
-        },
+        getMap: async (): Promise<Map<bigint, RandomnessRequest>> => { return (await this.appClient.state.box.getMap("requests")) as Map<bigint, RandomnessRequest> },
         /**
          * Get a current value of the requests map by key from box state
          */
-        value: async (key: bigint | number): Promise<RandomnessRequest | undefined> => {
-          return (await this.appClient.state.box.getMapValue('requests', key)) as RandomnessRequest | undefined
-        },
+        value: async (key: bigint | number): Promise<RandomnessRequest | undefined> => { return await this.appClient.state.box.getMapValue("requests", key) as RandomnessRequest | undefined },
       },
     },
   }
@@ -2336,110 +1593,61 @@ export class RandomnessBeaconClient {
   public newGroup(): RandomnessBeaconComposer {
     const client = this
     const composer = this.algorand.newGroup()
-    let promiseChain: Promise<unknown> = Promise.resolve()
+    let promiseChain:Promise<unknown> = Promise.resolve()
     const resultMappers: Array<undefined | ((x: ABIReturn | undefined) => any)> = []
     return {
       /**
        * Add a createRequest(address,uint64,pay)uint64 method call against the RandomnessBeacon contract
        */
-      createRequest(
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64']
-          | RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']
-        > & { onComplete?: OnApplicationComplete.NoOpOC },
-      ) {
-        promiseChain = promiseChain.then(async () =>
-          composer.addAppCallMethodCall(await client.params.createRequest(params)),
-        )
+      createRequest(params: CallParams<RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64'] | RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']> & {onComplete?: OnApplicationComplete.NoOpOC}) {
+        promiseChain = promiseChain.then(async () => composer.addAppCallMethodCall(await client.params.createRequest(params)))
         resultMappers.push((v) => client.decodeReturnValue('createRequest(address,uint64,pay)uint64', v))
         return this
       },
       /**
        * Add a cancelRequest(uint64)void method call against the RandomnessBeacon contract
        */
-      cancelRequest(
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['cancelRequest(uint64)void']
-          | RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']
-        > & { onComplete?: OnApplicationComplete.NoOpOC },
-      ) {
-        promiseChain = promiseChain.then(async () =>
-          composer.addAppCallMethodCall(await client.params.cancelRequest(params)),
-        )
+      cancelRequest(params: CallParams<RandomnessBeaconArgs['obj']['cancelRequest(uint64)void'] | RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']> & {onComplete?: OnApplicationComplete.NoOpOC}) {
+        promiseChain = promiseChain.then(async () => composer.addAppCallMethodCall(await client.params.cancelRequest(params)))
         resultMappers.push(undefined)
         return this
       },
       /**
        * Add a completeRequest(uint64,byte[80])void method call against the RandomnessBeacon contract
        */
-      completeRequest(
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void']
-          | RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']
-        > & { onComplete?: OnApplicationComplete.NoOpOC },
-      ) {
-        promiseChain = promiseChain.then(async () =>
-          composer.addAppCallMethodCall(await client.params.completeRequest(params)),
-        )
+      completeRequest(params: CallParams<RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void'] | RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']> & {onComplete?: OnApplicationComplete.NoOpOC}) {
+        promiseChain = promiseChain.then(async () => composer.addAppCallMethodCall(await client.params.completeRequest(params)))
         resultMappers.push(undefined)
         return this
       },
       /**
        * Add a getCosts()(uint64,uint64) method call against the RandomnessBeacon contract
        */
-      getCosts(
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)']
-          | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']
-        > & { onComplete?: OnApplicationComplete.NoOpOC },
-      ) {
-        promiseChain = promiseChain.then(async () =>
-          composer.addAppCallMethodCall(await client.params.getCosts(params)),
-        )
+      getCosts(params: CallParams<RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)'] | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']> & {onComplete?: OnApplicationComplete.NoOpOC}) {
+        promiseChain = promiseChain.then(async () => composer.addAppCallMethodCall(await client.params.getCosts(params)))
         resultMappers.push((v) => client.decodeReturnValue('getCosts()(uint64,uint64)', v))
         return this
       },
       /**
        * Add a updateManager(address)void method call against the RandomnessBeacon contract
        */
-      updateManager(
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['updateManager(address)void']
-          | RandomnessBeaconArgs['tuple']['updateManager(address)void']
-        > & { onComplete?: OnApplicationComplete.NoOpOC },
-      ) {
-        promiseChain = promiseChain.then(async () =>
-          composer.addAppCallMethodCall(await client.params.updateManager(params)),
-        )
+      updateManager(params: CallParams<RandomnessBeaconArgs['obj']['updateManager(address)void'] | RandomnessBeaconArgs['tuple']['updateManager(address)void']> & {onComplete?: OnApplicationComplete.NoOpOC}) {
+        promiseChain = promiseChain.then(async () => composer.addAppCallMethodCall(await client.params.updateManager(params)))
         resultMappers.push(undefined)
         return this
       },
       /**
        * Add a deleteManager()void method call against the RandomnessBeacon contract
        */
-      deleteManager(
-        params: CallParams<
-          RandomnessBeaconArgs['obj']['deleteManager()void'] | RandomnessBeaconArgs['tuple']['deleteManager()void']
-        > & {
-          onComplete?: OnApplicationComplete.NoOpOC
-        },
-      ) {
-        promiseChain = promiseChain.then(async () =>
-          composer.addAppCallMethodCall(await client.params.deleteManager(params)),
-        )
+      deleteManager(params: CallParams<RandomnessBeaconArgs['obj']['deleteManager()void'] | RandomnessBeaconArgs['tuple']['deleteManager()void']> & {onComplete?: OnApplicationComplete.NoOpOC}) {
+        promiseChain = promiseChain.then(async () => composer.addAppCallMethodCall(await client.params.deleteManager(params)))
         resultMappers.push(undefined)
         return this
       },
       /**
        * Add a manager()address method call against the RandomnessBeacon contract
        */
-      manager(
-        params: CallParams<
-          RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']
-        > & {
-          onComplete?: OnApplicationComplete.NoOpOC
-        },
-      ) {
+      manager(params: CallParams<RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']> & {onComplete?: OnApplicationComplete.NoOpOC}) {
         promiseChain = promiseChain.then(async () => composer.addAppCallMethodCall(await client.params.manager(params)))
         resultMappers.push((v) => client.decodeReturnValue('manager()address', v))
         return this
@@ -2447,13 +1655,7 @@ export class RandomnessBeaconClient {
       /**
        * Add a pause()void method call against the RandomnessBeacon contract
        */
-      pause(
-        params: CallParams<
-          RandomnessBeaconArgs['obj']['pause()void'] | RandomnessBeaconArgs['tuple']['pause()void']
-        > & {
-          onComplete?: OnApplicationComplete.NoOpOC
-        },
-      ) {
+      pause(params: CallParams<RandomnessBeaconArgs['obj']['pause()void'] | RandomnessBeaconArgs['tuple']['pause()void']> & {onComplete?: OnApplicationComplete.NoOpOC}) {
         promiseChain = promiseChain.then(async () => composer.addAppCallMethodCall(await client.params.pause(params)))
         resultMappers.push(undefined)
         return this
@@ -2461,13 +1663,7 @@ export class RandomnessBeaconClient {
       /**
        * Add a unpause()void method call against the RandomnessBeacon contract
        */
-      unpause(
-        params: CallParams<
-          RandomnessBeaconArgs['obj']['unpause()void'] | RandomnessBeaconArgs['tuple']['unpause()void']
-        > & {
-          onComplete?: OnApplicationComplete.NoOpOC
-        },
-      ) {
+      unpause(params: CallParams<RandomnessBeaconArgs['obj']['unpause()void'] | RandomnessBeaconArgs['tuple']['unpause()void']> & {onComplete?: OnApplicationComplete.NoOpOC}) {
         promiseChain = promiseChain.then(async () => composer.addAppCallMethodCall(await client.params.unpause(params)))
         resultMappers.push(undefined)
         return this
@@ -2475,44 +1671,23 @@ export class RandomnessBeaconClient {
       /**
        * Add a updatePauser(address)void method call against the RandomnessBeacon contract
        */
-      updatePauser(
-        params: CallParams<
-          | RandomnessBeaconArgs['obj']['updatePauser(address)void']
-          | RandomnessBeaconArgs['tuple']['updatePauser(address)void']
-        > & { onComplete?: OnApplicationComplete.NoOpOC },
-      ) {
-        promiseChain = promiseChain.then(async () =>
-          composer.addAppCallMethodCall(await client.params.updatePauser(params)),
-        )
+      updatePauser(params: CallParams<RandomnessBeaconArgs['obj']['updatePauser(address)void'] | RandomnessBeaconArgs['tuple']['updatePauser(address)void']> & {onComplete?: OnApplicationComplete.NoOpOC}) {
+        promiseChain = promiseChain.then(async () => composer.addAppCallMethodCall(await client.params.updatePauser(params)))
         resultMappers.push(undefined)
         return this
       },
       /**
        * Add a pauser()address method call against the RandomnessBeacon contract
        */
-      pauser(
-        params: CallParams<
-          RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']
-        > & {
-          onComplete?: OnApplicationComplete.NoOpOC
-        },
-      ) {
+      pauser(params: CallParams<RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']> & {onComplete?: OnApplicationComplete.NoOpOC}) {
         promiseChain = promiseChain.then(async () => composer.addAppCallMethodCall(await client.params.pauser(params)))
         resultMappers.push((v) => client.decodeReturnValue('pauser()address', v))
         return this
       },
       get update() {
         return {
-          updateApplication: (
-            params: CallParams<
-              | RandomnessBeaconArgs['obj']['updateApplication()void']
-              | RandomnessBeaconArgs['tuple']['updateApplication()void']
-            > &
-              AppClientCompilationParams,
-          ) => {
-            promiseChain = promiseChain.then(async () =>
-              composer.addAppUpdateMethodCall(await client.params.update.updateApplication(params)),
-            )
+          updateApplication: (params: CallParams<RandomnessBeaconArgs['obj']['updateApplication()void'] | RandomnessBeaconArgs['tuple']['updateApplication()void']> & AppClientCompilationParams) => {
+            promiseChain = promiseChain.then(async () => composer.addAppUpdateMethodCall(await client.params.update.updateApplication(params)))
             resultMappers.push(undefined)
             return this
           },
@@ -2520,15 +1695,8 @@ export class RandomnessBeaconClient {
       },
       get delete() {
         return {
-          deleteApplication: (
-            params: CallParams<
-              | RandomnessBeaconArgs['obj']['deleteApplication()void']
-              | RandomnessBeaconArgs['tuple']['deleteApplication()void']
-            >,
-          ) => {
-            promiseChain = promiseChain.then(async () =>
-              composer.addAppDeleteMethodCall(await client.params.delete.deleteApplication(params)),
-            )
+          deleteApplication: (params: CallParams<RandomnessBeaconArgs['obj']['deleteApplication()void'] | RandomnessBeaconArgs['tuple']['deleteApplication()void']>) => {
+            promiseChain = promiseChain.then(async () => composer.addAppDeleteMethodCall(await client.params.delete.deleteApplication(params)))
             resultMappers.push(undefined)
             return this
           },
@@ -2554,9 +1722,7 @@ export class RandomnessBeaconClient {
         const result = await (!options ? composer.simulate() : composer.simulate(options))
         return {
           ...result,
-          returns: result.returns?.map((val, i) =>
-            resultMappers[i] !== undefined ? resultMappers[i]!(val) : val.returnValue,
-          ),
+          returns: result.returns?.map((val, i) => resultMappers[i] !== undefined ? resultMappers[i]!(val) : val.returnValue)
         }
       },
       async send(params?: SendParams) {
@@ -2564,11 +1730,9 @@ export class RandomnessBeaconClient {
         const result = await composer.send(params)
         return {
           ...result,
-          returns: result.returns?.map((val, i) =>
-            resultMappers[i] !== undefined ? resultMappers[i]!(val) : val.returnValue,
-          ),
+          returns: result.returns?.map((val, i) => resultMappers[i] !== undefined ? resultMappers[i]!(val) : val.returnValue)
         }
-      },
+      }
     } as unknown as RandomnessBeaconComposer
   }
 }
@@ -2580,14 +1744,7 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
    * @param params Any additional parameters for the call
    * @returns The typed transaction composer so you can fluently chain multiple calls or call execute to execute all queued up transactions
    */
-  createRequest(
-    params?: CallParams<
-      | RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64']
-      | RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']
-    >,
-  ): RandomnessBeaconComposer<
-    [...TReturns, RandomnessBeaconReturns['createRequest(address,uint64,pay)uint64'] | undefined]
-  >
+  createRequest(params?: CallParams<RandomnessBeaconArgs['obj']['createRequest(address,uint64,pay)uint64'] | RandomnessBeaconArgs['tuple']['createRequest(address,uint64,pay)uint64']>): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['createRequest(address,uint64,pay)uint64'] | undefined]>
 
   /**
    * Calls the cancelRequest(uint64)void ABI method.
@@ -2596,12 +1753,7 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
    * @param params Any additional parameters for the call
    * @returns The typed transaction composer so you can fluently chain multiple calls or call execute to execute all queued up transactions
    */
-  cancelRequest(
-    params?: CallParams<
-      | RandomnessBeaconArgs['obj']['cancelRequest(uint64)void']
-      | RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']
-    >,
-  ): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['cancelRequest(uint64)void'] | undefined]>
+  cancelRequest(params?: CallParams<RandomnessBeaconArgs['obj']['cancelRequest(uint64)void'] | RandomnessBeaconArgs['tuple']['cancelRequest(uint64)void']>): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['cancelRequest(uint64)void'] | undefined]>
 
   /**
    * Calls the completeRequest(uint64,byte[80])void ABI method.
@@ -2610,14 +1762,7 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
    * @param params Any additional parameters for the call
    * @returns The typed transaction composer so you can fluently chain multiple calls or call execute to execute all queued up transactions
    */
-  completeRequest(
-    params?: CallParams<
-      | RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void']
-      | RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']
-    >,
-  ): RandomnessBeaconComposer<
-    [...TReturns, RandomnessBeaconReturns['completeRequest(uint64,byte[80])void'] | undefined]
-  >
+  completeRequest(params?: CallParams<RandomnessBeaconArgs['obj']['completeRequest(uint64,byte[80])void'] | RandomnessBeaconArgs['tuple']['completeRequest(uint64,byte[80])void']>): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['completeRequest(uint64,byte[80])void'] | undefined]>
 
   /**
    * Calls the getCosts()(uint64,uint64) ABI method.
@@ -2630,12 +1775,7 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
    * @param params Any additional parameters for the call
    * @returns The typed transaction composer so you can fluently chain multiple calls or call execute to execute all queued up transactions
    */
-  getCosts(
-    params?: CallParams<
-      | RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)']
-      | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']
-    >,
-  ): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['getCosts()(uint64,uint64)'] | undefined]>
+  getCosts(params?: CallParams<RandomnessBeaconArgs['obj']['getCosts()(uint64,uint64)'] | RandomnessBeaconArgs['tuple']['getCosts()(uint64,uint64)']>): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['getCosts()(uint64,uint64)'] | undefined]>
 
   /**
    * Calls the updateManager(address)void ABI method.
@@ -2646,12 +1786,7 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
    * @param params Any additional parameters for the call
    * @returns The typed transaction composer so you can fluently chain multiple calls or call execute to execute all queued up transactions
    */
-  updateManager(
-    params?: CallParams<
-      | RandomnessBeaconArgs['obj']['updateManager(address)void']
-      | RandomnessBeaconArgs['tuple']['updateManager(address)void']
-    >,
-  ): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['updateManager(address)void'] | undefined]>
+  updateManager(params?: CallParams<RandomnessBeaconArgs['obj']['updateManager(address)void'] | RandomnessBeaconArgs['tuple']['updateManager(address)void']>): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['updateManager(address)void'] | undefined]>
 
   /**
    * Calls the deleteManager()void ABI method.
@@ -2662,11 +1797,7 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
    * @param params Any additional parameters for the call
    * @returns The typed transaction composer so you can fluently chain multiple calls or call execute to execute all queued up transactions
    */
-  deleteManager(
-    params?: CallParams<
-      RandomnessBeaconArgs['obj']['deleteManager()void'] | RandomnessBeaconArgs['tuple']['deleteManager()void']
-    >,
-  ): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['deleteManager()void'] | undefined]>
+  deleteManager(params?: CallParams<RandomnessBeaconArgs['obj']['deleteManager()void'] | RandomnessBeaconArgs['tuple']['deleteManager()void']>): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['deleteManager()void'] | undefined]>
 
   /**
    * Calls the manager()address ABI method.
@@ -2677,11 +1808,7 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
    * @param params Any additional parameters for the call
    * @returns The typed transaction composer so you can fluently chain multiple calls or call execute to execute all queued up transactions
    */
-  manager(
-    params?: CallParams<
-      RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']
-    >,
-  ): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['manager()address'] | undefined]>
+  manager(params?: CallParams<RandomnessBeaconArgs['obj']['manager()address'] | RandomnessBeaconArgs['tuple']['manager()address']>): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['manager()address'] | undefined]>
 
   /**
    * Calls the pause()void ABI method.
@@ -2690,9 +1817,7 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
    * @param params Any additional parameters for the call
    * @returns The typed transaction composer so you can fluently chain multiple calls or call execute to execute all queued up transactions
    */
-  pause(
-    params?: CallParams<RandomnessBeaconArgs['obj']['pause()void'] | RandomnessBeaconArgs['tuple']['pause()void']>,
-  ): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['pause()void'] | undefined]>
+  pause(params?: CallParams<RandomnessBeaconArgs['obj']['pause()void'] | RandomnessBeaconArgs['tuple']['pause()void']>): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['pause()void'] | undefined]>
 
   /**
    * Calls the unpause()void ABI method.
@@ -2701,9 +1826,7 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
    * @param params Any additional parameters for the call
    * @returns The typed transaction composer so you can fluently chain multiple calls or call execute to execute all queued up transactions
    */
-  unpause(
-    params?: CallParams<RandomnessBeaconArgs['obj']['unpause()void'] | RandomnessBeaconArgs['tuple']['unpause()void']>,
-  ): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['unpause()void'] | undefined]>
+  unpause(params?: CallParams<RandomnessBeaconArgs['obj']['unpause()void'] | RandomnessBeaconArgs['tuple']['unpause()void']>): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['unpause()void'] | undefined]>
 
   /**
    * Calls the updatePauser(address)void ABI method.
@@ -2712,12 +1835,7 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
    * @param params Any additional parameters for the call
    * @returns The typed transaction composer so you can fluently chain multiple calls or call execute to execute all queued up transactions
    */
-  updatePauser(
-    params?: CallParams<
-      | RandomnessBeaconArgs['obj']['updatePauser(address)void']
-      | RandomnessBeaconArgs['tuple']['updatePauser(address)void']
-    >,
-  ): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['updatePauser(address)void'] | undefined]>
+  updatePauser(params?: CallParams<RandomnessBeaconArgs['obj']['updatePauser(address)void'] | RandomnessBeaconArgs['tuple']['updatePauser(address)void']>): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['updatePauser(address)void'] | undefined]>
 
   /**
    * Calls the pauser()address ABI method.
@@ -2728,11 +1846,7 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
    * @param params Any additional parameters for the call
    * @returns The typed transaction composer so you can fluently chain multiple calls or call execute to execute all queued up transactions
    */
-  pauser(
-    params?: CallParams<
-      RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']
-    >,
-  ): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['pauser()address'] | undefined]>
+  pauser(params?: CallParams<RandomnessBeaconArgs['obj']['pauser()address'] | RandomnessBeaconArgs['tuple']['pauser()address']>): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['pauser()address'] | undefined]>
 
   /**
    * Gets available update methods
@@ -2745,12 +1859,7 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
      * @param params Any additional parameters for the call
      * @returns The typed transaction composer so you can fluently chain multiple calls or call execute to execute all queued up transactions
      */
-    updateApplication(
-      params?: CallParams<
-        | RandomnessBeaconArgs['obj']['updateApplication()void']
-        | RandomnessBeaconArgs['tuple']['updateApplication()void']
-      >,
-    ): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['updateApplication()void'] | undefined]>
+    updateApplication(params?: CallParams<RandomnessBeaconArgs['obj']['updateApplication()void'] | RandomnessBeaconArgs['tuple']['updateApplication()void']>): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['updateApplication()void'] | undefined]>
   }
 
   /**
@@ -2764,12 +1873,7 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
      * @param params Any additional parameters for the call
      * @returns The typed transaction composer so you can fluently chain multiple calls or call execute to execute all queued up transactions
      */
-    deleteApplication(
-      params?: CallParams<
-        | RandomnessBeaconArgs['obj']['deleteApplication()void']
-        | RandomnessBeaconArgs['tuple']['deleteApplication()void']
-      >,
-    ): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['deleteApplication()void'] | undefined]>
+    deleteApplication(params?: CallParams<RandomnessBeaconArgs['obj']['deleteApplication()void'] | RandomnessBeaconArgs['tuple']['deleteApplication()void']>): RandomnessBeaconComposer<[...TReturns, RandomnessBeaconReturns['deleteApplication()void'] | undefined]>
   }
 
   /**
@@ -2795,19 +1899,14 @@ export type RandomnessBeaconComposer<TReturns extends [...any[]] = []> = {
    * Simulates the transaction group and returns the result
    */
   simulate(): Promise<RandomnessBeaconComposerResults<TReturns> & { simulateResponse: modelsv2.SimulateResponse }>
-  simulate(
-    options: SkipSignaturesSimulateOptions,
-  ): Promise<RandomnessBeaconComposerResults<TReturns> & { simulateResponse: modelsv2.SimulateResponse }>
-  simulate(
-    options: RawSimulateOptions,
-  ): Promise<RandomnessBeaconComposerResults<TReturns> & { simulateResponse: modelsv2.SimulateResponse }>
+  simulate(options: SkipSignaturesSimulateOptions): Promise<RandomnessBeaconComposerResults<TReturns> & { simulateResponse: modelsv2.SimulateResponse }>
+  simulate(options: RawSimulateOptions): Promise<RandomnessBeaconComposerResults<TReturns> & { simulateResponse: modelsv2.SimulateResponse }>
   /**
    * Sends the transaction group to the network and returns the results
    */
   send(params?: SendParams): Promise<RandomnessBeaconComposerResults<TReturns>>
 }
-export type RandomnessBeaconComposerResults<TReturns extends [...any[]]> = Expand<
-  SendAtomicTransactionComposerResults & {
-    returns: TReturns
-  }
->
+export type RandomnessBeaconComposerResults<TReturns extends [...any[]]> = Expand<SendAtomicTransactionComposerResults & {
+  returns: TReturns
+}>
+

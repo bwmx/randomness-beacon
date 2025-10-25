@@ -13,7 +13,7 @@ import { ApplicationSpy, TestExecutionContext } from '@algorandfoundation/algora
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { RandomnessBeacon } from './contract.algo'
 import { ExampleCaller } from './contracts/example-caller.algo'
-import { MAX_PENDING_REQUESTS, RandomnessRequest } from './types.algo'
+import { RandomnessRequest } from './types.algo'
 
 import libvrf from '../../../libvrf'
 
@@ -28,7 +28,7 @@ describe('RandomnessBeacon contract', () => {
     ctx.reset()
   })
 
-  const deploy = () => {
+  const deploy = (maxPendingRequests: bigint, maxFutureRound: bigint, staleRequestTimeout: bigint) => {
     const beaconContract = ctx.contract.create(RandomnessBeacon)
 
     const beaconApp = ctx.ledger.getApplicationForContract(beaconContract)
@@ -36,8 +36,12 @@ describe('RandomnessBeacon contract', () => {
     // generate vrf keypair to be used
     const { publicKey, secretKey } = libvrf.keypair()
 
-    console.log(publicKey, secretKey)
-    beaconContract.createApplication(new arc4.StaticBytes<32>(Bytes(publicKey)))
+    beaconContract.createApplication(
+      new arc4.StaticBytes<32>(Bytes(publicKey)),
+      new arc4.UintN64(maxPendingRequests), // max pending requests
+      new arc4.UintN64(maxFutureRound), // max future round
+      new arc4.UintN64(staleRequestTimeout), // stale request timeout
+    )
 
     // create new application spy
     const spy = new ApplicationSpy(RandomnessBeacon)
@@ -50,7 +54,7 @@ describe('RandomnessBeacon contract', () => {
 
       // ensure there is capacity for more pending requests
       assert(
-        beaconContract.totalPendingRequests.value.native < MAX_PENDING_REQUESTS,
+        beaconContract.totalPendingRequests.value.native < beaconContract.maxPendingRequests.value.native,
         'cannot exceed max pending requests',
       )
       // ensure the requested round is in the future
@@ -74,7 +78,10 @@ describe('RandomnessBeacon contract', () => {
       // calc fees paid = total - boxCost
       const feesPaid: uint64 = costsPayment.amount - boxCost.native
 
-      const requestId = beaconContract.currentRequestId.value
+      // get next available request id
+      const requestId = beaconContract.nextRequestId.value
+      // inc current requestId
+      beaconContract.nextRequestId.value = new arc4.UintN64(requestId.native + 1)
 
       const request = new RandomnessRequest({
         createdAt: new arc4.UintN64(Global.round),
@@ -87,8 +94,6 @@ describe('RandomnessBeacon contract', () => {
 
       // make request in box storage
       beaconContract.requests(requestId).value = request
-      // inc current requestId
-      beaconContract.currentRequestId.value = new arc4.UintN64(requestId.native + 1)
       // increment the total pending requests
       beaconContract.totalPendingRequests.value = new arc4.UintN64(beaconContract.totalPendingRequests.value.native + 1)
 
@@ -136,16 +141,19 @@ describe('RandomnessBeacon contract', () => {
   }
 
   it('Can be created and global state is as expected', () => {
-    const { beaconContract, publicKey } = deploy()
+    const { beaconContract, publicKey } = deploy(10n, 100n, 1000n)
 
     // check global state is as expected
     expect(beaconContract.publicKey.value.native).toStrictEqual(Bytes(publicKey))
-    expect(beaconContract.currentRequestId.value).toStrictEqual(new arc4.UintN64(1))
+    expect(beaconContract.nextRequestId.value).toStrictEqual(new arc4.UintN64(1))
     expect(beaconContract.totalPendingRequests.value).toStrictEqual(new arc4.UintN64(0))
+    expect(beaconContract.maxPendingRequests.value).toStrictEqual(new arc4.UintN64(10n))
+    expect(beaconContract.maxFutureRounds.value).toStrictEqual(new arc4.UintN64(100n))
+    expect(beaconContract.staleRequestTimeout.value).toStrictEqual(new arc4.UintN64(1000n))
   })
 
   it('can call createRequest', () => {
-    const { beaconContract, beaconApp } = deploy()
+    const { beaconContract, beaconApp } = deploy(10n, 100n, 1000n)
 
     // make contract
     const exampleCallerContract = ctx.contract.create(ExampleCaller)
@@ -168,7 +176,6 @@ describe('RandomnessBeacon contract', () => {
       amount: txnFees.native + boxCost.native,
     })
 
-    // TODO: the box doesn't get created, how to verify, it doesn't throw - succeeds against proper localnet e2e
     const r = exampleCallerContract.test1(costPayment)
 
     const requestId = r.at(0)
@@ -184,7 +191,7 @@ describe('RandomnessBeacon contract', () => {
   })
 
   it('Can call completeRequest()', () => {
-    const { beaconContract, beaconApp, publicKey, secretKey } = deploy()
+    const { beaconContract, beaconApp, secretKey } = deploy(10n, 100n, 1000n)
 
     const exampleCallerContract = ctx.contract.create(ExampleCaller)
 

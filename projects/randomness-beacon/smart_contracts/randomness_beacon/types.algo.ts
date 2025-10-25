@@ -6,7 +6,10 @@ export const ERR_MUST_BE_FUTURE_ROUND = 'must be a future round'
 export const ERR_MAX_PENDING_REQUESTS = 'cannot exceed max pending requests'
 export const ERR_MUST_BE_CALLED_FROM_APP = 'must be called by an application'
 export const ERR_NO_PENDING_REQUESTS = 'no pending requests'
-
+export const ERR_REQUEST_MUST_BE_STALE = 'request must be stale to cancel'
+export const ERR_TIMEOUT_CANNOT_BE_ZERO = 'stale request timeout cannot be zero'
+export const ERR_MAX_PENDING_REQUESTS_CANNOT_BE_ZERO = 'max pending requests cannot be zero'
+export const ERR_MAX_FUTURE_ROUNDS_CANNOT_BE_ZERO = 'max future rounds cannot be zero'
 // https://developer.algorand.org/articles/smart-contract-storage-boxes/
 export const BOX_CREATE_COST: uint64 = 2500
 export const BOX_BYTE_COST: uint64 = 400
@@ -15,12 +18,6 @@ export const NOTE_BOX_MBR_REFUND = 'box mbr refund'
 export const NOTE_FEES_PAYMENT = 'fees payment for caller'
 export const NOTE_CANCEL_PAYMENT = 'cancellation fees for caller'
 export const NOTE_CLOSE_OUT_REMAINDER = 'close out remainder to manager'
-
-// maximum number of pending requests allowed, useful while scalability is investigated
-export const MAX_PENDING_REQUESTS: uint64 = 5
-// after how many blocks past the target `round` of the request can it be cancelled
-export const MAX_PENDING_TIME: uint64 = 100 // should be 1000
-
 export type FulfillRandomnessFunction = (
   /* request id as reference */
   requestId: arc4.UintN64,

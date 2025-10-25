@@ -8,8 +8,6 @@ import { RandomnessBeaconFactory } from '../artifacts/randomness_beacon/Randomne
 
 import libvrf from '../../../libvrf'
 
-import { MAX_PENDING_REQUESTS, MAX_PENDING_TIME } from './types.algo'
-
 describe('RandomnessBeacon contract', () => {
   const localnet = algorandFixture()
 
@@ -48,7 +46,12 @@ describe('RandomnessBeacon contract', () => {
     return { client: appClient }
   }
 
-  const deploy = async (account: Address) => {
+  const deploy = async (
+    account: Address,
+    maxPendingRequests: bigint,
+    maxFutureRounds: bigint,
+    staleRequestTimeout: bigint,
+  ) => {
     const factory = localnet.algorand.client.getTypedAppFactory(RandomnessBeaconFactory, {
       defaultSender: account,
     })
@@ -59,7 +62,10 @@ describe('RandomnessBeacon contract', () => {
     const { appClient } = await factory.deploy({
       onUpdate: 'append',
       onSchemaBreak: 'append',
-      createParams: { args: [publicKey], method: 'createApplication' },
+      createParams: {
+        args: [publicKey, maxPendingRequests, maxFutureRounds, staleRequestTimeout],
+        method: 'createApplication',
+      },
     })
 
     // this does not work
@@ -75,29 +81,35 @@ describe('RandomnessBeacon contract', () => {
 
   test('initial global state correct', async () => {
     const { testAccount } = localnet.context
-    const { client, publicKey } = await deploy(testAccount)
+    const { client, publicKey } = await deploy(testAccount, 10n, 100n, 1000n)
 
     const globalState = await client.state.global.getAll()
 
     // expect global state to match what we set
     expect(globalState).toMatchObject({
       publicKey: publicKey,
-      currentRequestId: 1n,
+      nextRequestId: 1n,
       totalPendingRequests: 0n,
+      maxPendingRequests: 10n,
+      maxFutureRounds: 100n,
+      staleRequestTimeout: 1000n,
     })
   })
 
   test('can call createRequest()', async () => {
     const { testAccount } = localnet.context
-    const { client, publicKey } = await deploy(testAccount)
+    const { client, publicKey } = await deploy(testAccount, 10n, 100n, 1000n)
 
     const globalState = await client.state.global.getAll()
 
     // expect global state to match what we set
     expect(globalState).toMatchObject({
       publicKey: publicKey,
-      currentRequestId: 1n,
+      nextRequestId: 1n,
       totalPendingRequests: 0n,
+      maxPendingRequests: 10n,
+      maxFutureRounds: 100n,
+      staleRequestTimeout: 1000n,
     })
 
     const { client: exampleCallerApp } = await deployExampleCaller(testAccount, client.appId)
@@ -124,13 +136,13 @@ describe('RandomnessBeacon contract', () => {
   test(
     'can call createRequest() many times',
     async () => {
+      // how many times to test
+      const amount = 5n
+
       const { testAccount, algorand, generateAccount } = localnet.context
-      const { client } = await deploy(testAccount)
+      const { client } = await deploy(testAccount, amount, 100n, 1000n)
 
       const { client: exampleCallerApp } = await deployExampleCaller(testAccount, client.appId)
-
-      // fill entirely
-      const amount = MAX_PENDING_REQUESTS
 
       for (let i = 0; i < amount; i++) {
         const acc = await generateAccount({ initialFunds: (1).algos() })
@@ -160,7 +172,7 @@ describe('RandomnessBeacon contract', () => {
 
   test('can call cancelRequest()', async () => {
     const { testAccount, algod, algorand } = localnet.context
-    const { client, publicKey } = await deploy(testAccount)
+    const { client, publicKey } = await deploy(testAccount, 10n, 100n, 50n)
 
     console.table(client.appClient.getGlobalState())
 
@@ -169,8 +181,11 @@ describe('RandomnessBeacon contract', () => {
     // expect global state to match what we set
     expect(globalState).toMatchObject({
       publicKey: publicKey,
-      currentRequestId: 1n,
+      nextRequestId: 1n,
       totalPendingRequests: 0n,
+      maxPendingRequests: 10n,
+      maxFutureRounds: 100n,
+      staleRequestTimeout: 50n,
     })
 
     const { client: exampleCallerApp } = await deployExampleCaller(testAccount, client.appId)
@@ -193,8 +208,11 @@ describe('RandomnessBeacon contract', () => {
 
     console.log('createRequest() = ', r.return)
 
+    const staleRequestTimeout = await client.state.global.staleRequestTimeout()
+    expect(staleRequestTimeout).toEqual(50n)
+
     // we want to cancel, timeout is 1000 blocks (hardcoded)
-    const timeoutRound = r.return![1] + BigInt(MAX_PENDING_TIME)
+    const timeoutRound = r.return![1] + BigInt(staleRequestTimeout!)
 
     // submit dummy txns to advance the rounds
     let status = await algod.status().do()
@@ -221,7 +239,7 @@ describe('RandomnessBeacon contract', () => {
 
   test('can call completeRequest()', async () => {
     const { testAccount, algod, algorand } = localnet.context
-    const { client, publicKey, secretKey } = await deploy(testAccount)
+    const { client, publicKey, secretKey } = await deploy(testAccount, 10n, 100n, 1000n)
 
     console.table(client.appClient.getGlobalState())
 
@@ -230,8 +248,11 @@ describe('RandomnessBeacon contract', () => {
     // expect global state to match what we set
     expect(globalState).toMatchObject({
       publicKey: publicKey,
-      currentRequestId: 1n,
+      nextRequestId: 1n,
       totalPendingRequests: 0n,
+      maxPendingRequests: 10n,
+      maxFutureRounds: 100n,
+      staleRequestTimeout: 1000n,
     })
 
     const { client: exampleCallerApp } = await deployExampleCaller(testAccount, client.appId)
@@ -294,13 +315,12 @@ describe('RandomnessBeacon contract', () => {
   test(
     'can call completeRequests() many times',
     async () => {
+      // how many times to test
+      const amount = 5n
       const { testAccount, algorand, generateAccount, algod } = localnet.context
-      const { client, secretKey } = await deploy(testAccount)
+      const { client, secretKey } = await deploy(testAccount, amount, 100n, 1000n)
 
       const { client: exampleCallerApp } = await deployExampleCaller(testAccount, client.appId)
-
-      // just do the absolute limit
-      const amount = MAX_PENDING_REQUESTS
 
       for (let i = 1; i <= amount; i++) {
         const acc = await generateAccount({ initialFunds: (1).algos() })

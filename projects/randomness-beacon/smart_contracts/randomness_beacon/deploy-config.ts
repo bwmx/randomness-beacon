@@ -18,7 +18,10 @@ export async function deploy() {
   const { appClient, result } = await factory.deploy({
     onUpdate: 'append',
     onSchemaBreak: 'append',
-    createParams: { args: { publicKey: publicKey }, method: 'createApplication(byte[32])void' },
+    createParams: {
+      args: { publicKey: publicKey, maxPendingRequests: 5n, maxFutureRounds: 100n, staleRequestTimeout: 1000n },
+      method: 'createApplication(byte[32],uint64,uint64,uint64)void',
+    },
   })
 
   // If app was just created fund the app account
