@@ -1,13 +1,14 @@
 {
   "name": "daemon",
-  "version": "1.0.0",
-  "description": "Daemon",
+  "version": "0.1.0",
+  "description": "Randomness Beacon Daemon",
   "main": "src/index.ts",
   "scripts": {
-    "start": "npx tsc && node --env-file=.env dist/daemon/src/index.js",
-    "format": "prettier --write .",
+    "start": "node dist/daemon/src/index.js",
+    "dev": "node --env-file=.env -r ts-node/register ./src/index.ts",
     "build": "npx tsc",
     "test": "echo \"Error: no test specified\" && exit 1",
+    "format": "prettier --write .",
     "generate-keypair": "npx ts-node scripts/generate-keypair.ts"
   },
   "license": "ISC",
@@ -17,8 +18,14 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },
+  "engines": {
+    "node": ">=22.0",
+    "npm": ">=9.0"
+  },
   "dependencies": {
     "@algorandfoundation/algokit-utils": "^9.1.2",
-    "algosdk": "^3.5.2"
+    "algosdk": "^3.5.2",
+    "pino": "^10.1.0",
+    "pino-pretty": "^13.1.2"
   }
 }

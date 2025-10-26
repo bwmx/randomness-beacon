@@ -1,85 +1,114 @@
-import { Algodv2, makeBasicAccountTransactionSigner, mnemonicToSecretKey, TransactionSigner } from 'algosdk'
-import { RandomnessBeaconClient } from './contracts/RandomnessBeaconClient'
+import { makeBasicAccountTransactionSigner } from 'algosdk'
 import * as algokit from '@algorandfoundation/algokit-utils'
-
 import libvrf from '../../libvrf'
+import { createProofForRound, ErrSleepAborted, getLastRound, makeRandomnessBeaconClient, sleep } from './utils'
+import config from './config'
+import logger from './logger'
 
-const algorand = algokit.AlgorandClient.fromEnvironment()
+const { beaconAppId, managerAccount, vrfSecretKey, pollInterval } = config
 
-// https://stackoverflow.com/questions/68329418/in-javascript-how-can-i-throw-an-error-if-an-environmental-variable-is-missing
-function getEnv(name: string) {
-  const val = process.env[name]
-  if (val === undefined) {
-    throw Error('env ${name} is undefined')
-  }
-  return val
-}
+const managerClient = makeRandomnessBeaconClient(
+  beaconAppId,
+  managerAccount.addr.toString(),
+  makeBasicAccountTransactionSigner(managerAccount),
+)
 
-const beaconAppId = BigInt(getEnv('BEACON_APP_ID'))
-const managerAccount = mnemonicToSecretKey(getEnv('MANAGER_MNEMONIC'))
-const vrfSecretKey = Buffer.from(getEnv('VRF_KEYPAIR_SECRET_KEY'), 'base64')
-
-const makeRandomnessBeaconClient = (
-  appId: bigint,
-  activeAddress: string,
-  transactionSigner: TransactionSigner,
-): RandomnessBeaconClient => {
-  const client = new RandomnessBeaconClient({
-    algorand,
-    appId: appId,
-    defaultSigner: transactionSigner,
-    defaultSender: activeAddress,
-  })
-
-  return client
-}
-
-const createProofForRound = async (round: bigint, algod: Algodv2): Promise<Uint8Array<ArrayBufferLike>> => {
-  // get block from node
-  const { block } = await algod.block(round).do()
-  // get the seed
-  const { seed } = block.header
-
-  const { proof, result } = libvrf.prove(vrfSecretKey, seed)
-  if (result !== 0) {
-    throw Error('vrf prove failed')
-  }
-
-  return proof
-}
-
-;(async () => {
-  const { algod } = algorand.client
+/**
+ * Main worker loop
+ * @param signal AbortSignal to stop the loop (potentially used in future)
+ * @description
+ * This loop will poll for pending randomness requests and process them
+ * It will complete requests that are ready and cancel stale requests
+ */
+const main = async (signal: AbortSignal) => {
+  logger.info({ beaconAppId, managerAddress: managerAccount.addr.toString() }, 'Starting RandomnessBeacon daemon')
 
   // init vrf lib
   await libvrf.init()
+  // for debug purposes
+  logger.debug('libvrf initialized')
 
-  const managerClient = makeRandomnessBeaconClient(
-    beaconAppId,
-    managerAccount.addr.toString(),
-    makeBasicAccountTransactionSigner(managerAccount),
-  )
-
-  const { staleRequestTimeout, totalPendingRequests } = await managerClient.state.global.getAll()
-  if (staleRequestTimeout === undefined || totalPendingRequests === undefined) {
+  // get stale request timeout from global state, this will only be used once
+  const staleRequestTimeout = await managerClient.state.global.staleRequestTimeout()
+  if (staleRequestTimeout === undefined) {
     throw Error('beacon global state is not properly initialized')
   }
 
-  if (totalPendingRequests > 0) {
-    console.info(`${totalPendingRequests} pending requests`)
-    // get lastRound from chain to get a reference point in time
-    const { lastRound } = await algod.status().do()
+  // log for debug purposes
+  logger.debug({ staleRequestTimeout: Number(staleRequestTimeout) }, 'staleRequestTimeout retrieved from global state')
+
+  while (!signal.aborted) {
+    /**
+     * Sleep for the configured poll interval
+     * If the sleep is aborted due to the signal, exit the loop
+     */
+    try {
+      await sleep(pollInterval, signal)
+    } catch (error: Error | unknown) {
+      if (error instanceof Error && error === ErrSleepAborted && signal.aborted) {
+        logger.info('Sleep aborted, exiting main worker loop')
+        break
+      }
+    }
+
+    const totalPendingRequests = await managerClient.state.global.totalPendingRequests()
+    if (totalPendingRequests === undefined) {
+      throw Error('beacon global state is not properly initialized')
+    }
+
+    // useful for debugging
+    logger.debug({ beaconAppId, totalPendingRequests: Number(totalPendingRequests) }, 'Polled for pending requests')
+
+    if (totalPendingRequests === 0n) {
+      continue
+    }
+
     // read the boxes to get pending requests
     const boxMap = await managerClient.state.box.requests.getMap()
+    // get lastRound from chain to get a reference point in time
+    const lastRound = await getLastRound()
+    // log lastRound for debug purposes
+    logger.debug({ lastRound }, 'Got last round')
+    // loop through all requests
     for (const [requestId, request] of boxMap) {
-      // iterate all and check if can be completed, cancelled or no action
-      if (request.round <= lastRound) {
-        // request round is available, we should call completeRequest with the vrf proof output
-        console.info(
-          `RandomnessRequest ${requestId} is ready to be completed (${lastRound - request.round} after target round)`,
+      const roundsSinceReady = lastRound - request.round
+
+      // not ready yet, skip
+      if (roundsSinceReady <= 0n) {
+        logger.info(
+          { requestId, targetRound: request.round, lastRound, roundsSinceReady },
+          'Request not ready yet, skipping',
         )
-        // create the proof
-        const proof = await createProofForRound(request.round, algod)
+        continue
+      }
+
+      // has timed out, cancel it
+      if (roundsSinceReady >= staleRequestTimeout) {
+        logger.warn(
+          { requestId, targetRound: request.round, lastRound, roundsSinceReady },
+          'Request has timed out, attempting to cancel',
+        )
+
+        await managerClient.send.cancelRequest({
+          args: [requestId],
+          populateAppCallResources: true,
+          coverAppCallInnerTransactionFees: true,
+          maxFee: algokit.algos(0.003), // TODO: consider max fee changing
+          suppressLog: true,
+        })
+
+        logger.info(
+          { requestId, requesterAppId: request.requesterAppId, requesterAddress: request.requesterAddress },
+          'Request cancelled successfully',
+        )
+      } else if (roundsSinceReady > 0n) {
+        logger.info(
+          { requestId, targetRound: request.round, lastRound, roundsSinceReady },
+          'Randomness request is ready to be completed',
+        )
+
+        const proof = await createProofForRound(vrfSecretKey, request.round)
+
         // send complete request
         await managerClient.send.completeRequest({
           args: [requestId, proof],
@@ -87,28 +116,37 @@ const createProofForRound = async (round: bigint, algod: Algodv2): Promise<Uint8
           coverAppCallInnerTransactionFees: true,
           // TODO: consider doing this dynamically, allow users to cover additional fee costs by overpaying to the beacon
           maxFee: algokit.algos(0.012),
+          suppressLog: true,
+          firstValidRound: lastRound,
+          validityWindow: 500n, // TODO: investigate why this is required, can't access the target round even when it's within range
         })
-      } else if (request.round + staleRequestTimeout <= lastRound) {
-        // we have reached the max amount of time elapsed to complete a request, this round can no longer be accessed
-        console.info(
-          `RandomnessRequest ${requestId} has timed out (${lastRound - request.round} rounds past accessable round range)`,
-        )
-        // attempt to cancel the request
-        await managerClient.send.cancelRequest({
-          args: [requestId],
-          populateAppCallResources: true,
-          coverAppCallInnerTransactionFees: true,
-          maxFee: algokit.algos(0.003), // TODO: consider max fee changing
-        })
-      } else {
-        console.info(
-          `RandomnessRequest ${requestId} can be completed at round ${request.round} (in ${request.round - lastRound} rounds)`,
+
+        logger.info(
+          { requestId, requesterAppId: request.requesterAppId, requesterAddress: request.requesterAddress },
+          'Request completed successfully',
         )
       }
     }
-  } else {
-    console.info('there are no pending requests')
   }
-})().catch((reason) => {
-  console.error(reason)
+}
+
+const abortController = new AbortController()
+
+process.on('SIGINT', () => {
+  logger.info('Received SIGINT, shutting down gracefully')
+  abortController.abort()
 })
+
+process.on('SIGTERM', () => {
+  logger.info('Received SIGTERM, shutting down gracefully')
+  abortController.abort()
+})
+
+main(abortController.signal)
+  .catch((err: Error) => {
+    logger.fatal({ err: err.message }, 'Fatal error')
+    process.exit(1)
+  })
+  .finally(() => {
+    logger.info('Daemon is shutting down, goodbye')
+  })
