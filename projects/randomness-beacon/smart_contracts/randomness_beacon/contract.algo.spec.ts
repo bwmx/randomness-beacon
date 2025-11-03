@@ -9,6 +9,7 @@ import { RandomnessRequest, RequestCreated, VrfPublicKey } from './types.algo'
 
 describe('RandomnessBeacon contract', () => {
   const ctx = new TestExecutionContext()
+  let exampleCallerAppId: uint64 = 0
 
   beforeAll(async () => {
     await libvrf.init()
@@ -16,6 +17,7 @@ describe('RandomnessBeacon contract', () => {
 
   afterEach(() => {
     ctx.reset()
+    exampleCallerAppId = 0
   })
 
   const deploy = (maxPendingRequests: uint64, maxFutureRound: uint64, staleRequestTimeout: uint64) => {
@@ -38,8 +40,7 @@ describe('RandomnessBeacon contract', () => {
 
     spy.on.createRequest((itxnContext) => {
       const round: uint64 = arc4.decodeArc4(itxnContext.appArgs(2))
-      // const requesterAddress: string = arc4.decodeArc4(itxnContext.appArgs(1))
-      const requesterAddress = Global.zeroAddress
+      const requesterAddress: arc4.Address = arc4.decodeArc4(itxnContext.appArgs(1))
       const costsPayment: gtxn.PaymentTxn = itxnContext.itxns![0] as any
 
       // ensure there is capacity for more pending requests
@@ -52,7 +53,7 @@ describe('RandomnessBeacon contract', () => {
 
       // get the costs
       const { fees, boxMbr } = beaconContract.getCosts()
-
+      // check the costs payment covers required fees + box mbr
       assertMatch(
         costsPayment,
         {
@@ -76,8 +77,8 @@ describe('RandomnessBeacon contract', () => {
       const request: RandomnessRequest = {
         createdAt: Global.round,
         round: round,
-        requesterAppId: Global.callerApplicationId,
-        requesterAddress: new arc4.Address(requesterAddress),
+        requesterAppId: exampleCallerAppId,
+        requesterAddress: requesterAddress,
         costs: {
           fees: feesPaid,
           boxMbr: boxMbr,
@@ -93,13 +94,14 @@ describe('RandomnessBeacon contract', () => {
       emit<RequestCreated>({
         requestId: requestId,
         requesterAppId: Global.callerApplicationId,
-        requesterAddress: new arc4.Address(requesterAddress),
+        requesterAddress: requesterAddress,
         round: round,
       })
 
       itxnContext.setReturnValue(requestId)
     })
 
+    // TODO: fix completeRequest spy see below commented test also
     // spy.on.completeRequest((itxnContext) => {
     //   // workaround lack of vrfVerify in testing
     //   // just use libvrf instead
@@ -162,18 +164,31 @@ describe('RandomnessBeacon contract', () => {
       amount: fees + boxMbr,
     })
 
+    // set for test so ApplicationSpy hooks know
+    exampleCallerAppId = exampleCallerApp.id
+
     // call test1 method, get a requestid and target round in return
     const [requestId, targetRound] = exampleCallerContract.test1(costPayment)
 
     // should be a future round
-    expect(targetRound).toBeGreaterThanOrEqual(Global.round)
+    expect(BigInt(targetRound)).toBeGreaterThanOrEqual(BigInt(Global.round))
     // should always be 1, we're the first request
     expect(requestId).toEqual(1)
     // same as above, should equal zero
     expect(beaconContract.totalPendingRequests.value).toEqual(1)
-    // TODO: verify box on the beacon app exists under the pending requestId
+    // verify box on the beacon app exists under the pending requestId
+    const storedRequest = beaconContract.requests(requestId).value
+
+    // check everything stored correctly
+    expect(BigInt(storedRequest.createdAt)).toBeLessThan(BigInt(Global.round))
+    expect(storedRequest.requesterAppId).toEqual(exampleCallerApp.id)
+    expect(storedRequest.requesterAddress.native).toEqual(requesterAddress)
+    expect(storedRequest.round).toEqual(targetRound)
+    expect(storedRequest.costs.fees).toEqual(fees)
+    expect(storedRequest.costs.boxMbr).toEqual(boxMbr)
   })
 
+  // TODO: fix test, ApplicationSpy not working as expected
   // it('Can call completeRequest()', () => {
   //   const { beaconContract, beaconApp, secretKey } = deploy(10, 100, 1000)
 
