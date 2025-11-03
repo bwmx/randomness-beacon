@@ -4,7 +4,6 @@ import {
   assertMatch,
   BoxMap,
   clone,
-  contract,
   emit,
   ensureBudget,
   Global,
@@ -48,7 +47,6 @@ import {
   VrfPublicKey,
 } from './types.algo'
 
-@contract({ name: 'RandomnessBeacon', avmVersion: 11 })
 export class RandomnessBeacon extends classes(Managable, Pausable) implements arc4.ConventionalRouting {
   /* the public key used to verify VRF proofs */
   publicKey = GlobalState<VrfPublicKey>({ key: 'publicKey' })
