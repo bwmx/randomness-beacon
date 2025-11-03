@@ -3,7 +3,7 @@ import { registerDebugEventHandlers } from '@algorandfoundation/algokit-utils-de
 import { algorandFixture } from '@algorandfoundation/algokit-utils/testing'
 import { Address } from 'algosdk'
 import { beforeAll, beforeEach, describe, expect, test } from 'vitest'
-import { ExampleCallerFactory } from '../artifacts/randomness_beacon//contracts/ExampleCallerClient'
+import { ExampleCallerFactory } from '../artifacts/randomness_beacon/contracts/ExampleCallerClient'
 import { RandomnessBeaconFactory } from '../artifacts/randomness_beacon/RandomnessBeaconClient'
 
 import libvrf from '../../../libvrf'
@@ -87,7 +87,7 @@ describe('RandomnessBeacon contract', () => {
 
     // expect global state to match what we set
     expect(globalState).toMatchObject({
-      publicKey: publicKey,
+      publicKey: publicKey.buffer,
       nextRequestId: 1n,
       totalPendingRequests: 0n,
       maxPendingRequests: 10n,
@@ -98,28 +98,16 @@ describe('RandomnessBeacon contract', () => {
 
   test('can call createRequest()', async () => {
     const { testAccount } = localnet.context
-    const { client, publicKey } = await deploy(testAccount, 10n, 100n, 1000n)
-
-    const globalState = await client.state.global.getAll()
-
-    // expect global state to match what we set
-    expect(globalState).toMatchObject({
-      publicKey: publicKey,
-      nextRequestId: 1n,
-      totalPendingRequests: 0n,
-      maxPendingRequests: 10n,
-      maxFutureRounds: 100n,
-      staleRequestTimeout: 1000n,
-    })
+    const { client } = await deploy(testAccount, 10n, 100n, 1000n)
 
     const { client: exampleCallerApp } = await deployExampleCaller(testAccount, client.appId)
 
     // TODO: build paymentxn to cover the fees
-    const [txnFees, boxCost] = await client.getCosts()
+    const { fees, boxMbr } = await client.getCosts()
     const payment = localnet.context.algorand.createTransaction.payment({
       sender: testAccount,
       receiver: exampleCallerApp.appAddress,
-      amount: microAlgos(txnFees + boxCost),
+      amount: microAlgos(fees + boxMbr),
     })
 
     const r = await exampleCallerApp.send.test1({
@@ -148,11 +136,11 @@ describe('RandomnessBeacon contract', () => {
         const acc = await generateAccount({ initialFunds: (1).algos() })
 
         // TODO: build paymentxn to cover the fees
-        const [txnFees, boxCost] = await client.getCosts()
+        const { fees, boxMbr } = await client.getCosts()
         const payment = algorand.createTransaction.payment({
           sender: acc,
           receiver: exampleCallerApp.appAddress,
-          amount: microAlgos(txnFees + boxCost),
+          amount: microAlgos(fees + boxMbr),
         })
 
         const r = await exampleCallerApp.send.test1({
@@ -172,31 +160,17 @@ describe('RandomnessBeacon contract', () => {
 
   test('can call cancelRequest()', async () => {
     const { testAccount, algod, algorand } = localnet.context
-    const { client, publicKey } = await deploy(testAccount, 10n, 100n, 50n)
-
-    console.table(client.appClient.getGlobalState())
-
-    const globalState = await client.state.global.getAll()
-
-    // expect global state to match what we set
-    expect(globalState).toMatchObject({
-      publicKey: publicKey,
-      nextRequestId: 1n,
-      totalPendingRequests: 0n,
-      maxPendingRequests: 10n,
-      maxFutureRounds: 100n,
-      staleRequestTimeout: 50n,
-    })
+    const { client } = await deploy(testAccount, 10n, 100n, 50n)
 
     const { client: exampleCallerApp } = await deployExampleCaller(testAccount, client.appId)
 
     // get fees from readonly func on app
-    const [txnFees, boxCost] = await client.getCosts()
+    const { fees, boxMbr } = await client.getCosts()
     // create payment txn
     const payment = localnet.context.algorand.createTransaction.payment({
       sender: testAccount,
       receiver: exampleCallerApp.appAddress,
-      amount: microAlgos(txnFees + boxCost),
+      amount: microAlgos(fees + boxMbr),
     })
 
     const r = await exampleCallerApp.send.test1({
@@ -239,31 +213,17 @@ describe('RandomnessBeacon contract', () => {
 
   test('can call completeRequest()', async () => {
     const { testAccount, algod, algorand } = localnet.context
-    const { client, publicKey, secretKey } = await deploy(testAccount, 10n, 100n, 1000n)
-
-    console.table(client.appClient.getGlobalState())
-
-    const globalState = await client.state.global.getAll()
-
-    // expect global state to match what we set
-    expect(globalState).toMatchObject({
-      publicKey: publicKey,
-      nextRequestId: 1n,
-      totalPendingRequests: 0n,
-      maxPendingRequests: 10n,
-      maxFutureRounds: 100n,
-      staleRequestTimeout: 1000n,
-    })
+    const { client, secretKey } = await deploy(testAccount, 10n, 100n, 1000n)
 
     const { client: exampleCallerApp } = await deployExampleCaller(testAccount, client.appId)
 
     const exampleRequester = await localnet.context.generateAccount({ initialFunds: (10).algos() })
 
-    const [txnFees, boxCost] = await client.getCosts()
+    const { fees, boxMbr } = await client.getCosts()
     const payment = algorand.createTransaction.payment({
       sender: exampleRequester.addr,
       receiver: exampleCallerApp.appAddress,
-      amount: microAlgos(txnFees + boxCost),
+      amount: microAlgos(fees + boxMbr),
     })
 
     const r = await exampleCallerApp.send.test1({
@@ -326,11 +286,11 @@ describe('RandomnessBeacon contract', () => {
         const acc = await generateAccount({ initialFunds: (1).algos() })
 
         // TODO: build paymentxn to cover the fees
-        const [txnFees, boxCost] = await client.getCosts()
+        const { fees, boxMbr } = await client.getCosts()
         const payment = algorand.createTransaction.payment({
           sender: acc,
           receiver: exampleCallerApp.appAddress,
-          amount: microAlgos(txnFees + boxCost),
+          amount: microAlgos(fees + boxMbr),
         })
 
         const r = await exampleCallerApp.send.test1({
