@@ -1,11 +1,11 @@
-import { arc4, assert, assertMatch, emit, Global, gtxn, uint64 } from '@algorandfoundation/algorand-typescript'
+import { arc4, assert, assertMatch, emit, Global, gtxn, op, uint64 } from '@algorandfoundation/algorand-typescript'
 import { ApplicationSpy, TestExecutionContext } from '@algorandfoundation/algorand-typescript-testing'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { RandomnessBeacon } from './contract.algo'
 import { ExampleCaller } from './contracts/example-caller.algo'
 
 import libvrf from '../../../libvrf'
-import { RandomnessRequest, RequestCreated, VrfPublicKey } from './types.algo'
+import { RandomnessRequest, RequestCreated, VrfProof, VrfPublicKey } from './types.algo'
 
 describe('RandomnessBeacon contract', () => {
   const ctx = new TestExecutionContext()
@@ -101,30 +101,24 @@ describe('RandomnessBeacon contract', () => {
       itxnContext.setReturnValue(requestId)
     })
 
-    // TODO: fix completeRequest spy see below commented test also
-    // spy.on.completeRequest((itxnContext) => {
-    //   // workaround lack of vrfVerify in testing
-    //   // just use libvrf instead
+    //TODO: fix completeRequest spy see below commented test also
+    spy.on.completeRequest((itxnContext) => {
+      console.log('hi')
 
-    //   // TODO: get from itxnContext
-    //   const requestId: uint64 = 1
-    //   // TODO get from params
-    //   const proof = undefined
+      // workaround lack of vrfVerify in testing
+      // just use libvrf instead
+      const requestId: uint64 = arc4.decodeArc4(itxnContext.appArgs(1))
+      const proof: VrfProof = arc4.decodeArc4(itxnContext.appArgs(2))
 
-    //   const request = beaconContract.requests(requestId).value
+      const request = beaconContract.requests(requestId).value
 
-    //   const blockSeed = op.Block.blkSeed(request.round)
+      const blockSeed = op.Block.blkSeed(request.round)
 
-    //   const { output, result } = libvrf.verify(beaconContract.publicKey, proof, blockSeed)
+      const { output, result } = libvrf.verify(beaconContract.publicKey, proof, blockSeed)
 
-    //   // call example app
-    //   // TODO: fix properly
-    //   // ExampleCaller.prototype.fulfillRandomness(
-    //   //   requestId,
-    //   //   request.requesterAddress,
-    //   //   new arc4.StaticBytes<64>(Bytes(output)),
-    //   // )
-    // })
+      // TODO: call fulfillRandomness on the requester app
+      // ommited due to ApplicationSpy not working as expected in tests
+    })
 
     // add spy to test context
     ctx.addApplicationSpy(spy)
@@ -188,43 +182,45 @@ describe('RandomnessBeacon contract', () => {
     expect(storedRequest.costs.boxMbr).toEqual(boxMbr)
   })
 
-  // TODO: fix test, ApplicationSpy not working as expected
-  // it('Can call completeRequest()', () => {
-  //   const { beaconContract, beaconApp, secretKey } = deploy(10, 100, 1000)
+  // TODO: fix test, ApplicationSpy not working as expected, the hook never gets called
+  it('Can call completeRequest()', () => {
+    const { beaconContract, beaconApp, secretKey } = deploy(10, 100, 1000)
+    // create example caller contract
+    const exampleCallerContract = ctx.contract.create(ExampleCaller)
+    // create application (pass existing beacon app)
+    exampleCallerContract.createApplication(beaconApp)
+    // get handle to app on ledger
+    const exampleCallerApp = ctx.ledger.getApplicationForContract(exampleCallerContract)
+    // get costs
+    const { fees, boxMbr } = beaconContract.getCosts()
+    // build fee payment
+    const feePayment = ctx.any.txn.payment({
+      receiver: exampleCallerApp.address,
+      amount: fees + boxMbr,
+    })
+    // call test1 method, returns requestId and targetRound Tuple
+    const [requestId, round] = exampleCallerContract.test1(feePayment)
 
-  //   const exampleCallerContract = ctx.contract.create(ExampleCaller)
+    console.log(`test1() -> [requestId: ${requestId}, round: ${round}]`)
 
-  //   // create application
-  //   exampleCallerContract.createApplication(beaconApp.id)
+    // patch target round with some dummy (empty seed data) [predictable]
+    ctx.ledger.patchBlockData(round, {
+      seed: op.bzero(32),
+    })
 
-  //   // get handle to app on ledger
-  //   const exampleCallerApp = ctx.ledger.getApplicationForContract(exampleCallerContract)
+    // set round to the target round (so seed is available)
+    ctx.ledger.patchGlobalData({
+      round: round,
+    })
 
-  //   const { fees, boxMbr } = beaconContract.getCosts()
+    // get block seed
+    const blockSeed = op.Block.blkSeed(round)
+    // create the proof
+    const { proof, result } = libvrf.prove(secretKey, blockSeed.toString())
+    // result 0 === success, must be proven succesfully
+    expect(result).toEqual(0)
 
-  //   const feePayment = ctx.any.txn.payment({
-  //     receiver: exampleCallerApp.address,
-  //     amount: fees + boxMbr,
-  //   })
-
-  //   const [requestId, round] = exampleCallerContract.test1(feePayment)
-
-  //   console.log('ret = ', requestId, round)
-
-  //   // patch round 7 with some dummy seeed data
-  //   ctx.ledger.patchBlockData(round, {
-  //     seed: bzero(32),
-  //   })
-
-  //   // however block 7 is not set
-  //   const blockSeed = op.Block.blkSeed(7)
-
-  //   // create the proof
-  //   const { proof, result } = libvrf.prove(secretKey, blockSeed.toString())
-  //   // result 0 === success, must be proven succesfully
-  //   expect(result).toEqual(0)
-
-  //   // todo: mock completeRequest, verify the proof in there and proceed... vrfVerify unavailable in testing
-  //   //beaconContract.completeRequest(requestId, new arc4.StaticBytes<80>(Bytes(proof)))
-  // })
+    // todo: mock completeRequest, verify the proof in there and proceed... vrfVerify unavailable in testing
+    beaconContract.completeRequest(requestId, proof.buffer as any as VrfProof)
+  })
 })
