@@ -55,7 +55,7 @@ export type FulfillRandomnessFunction = (
  */
 export interface IRandomnessBeaconRequester {
   /**
-   * The function to invoke when closing out of this application
+   * The function to invoke when a randomness request is fulfilled
    */
   fulfillRandomness: FulfillRandomnessFunction
 }
