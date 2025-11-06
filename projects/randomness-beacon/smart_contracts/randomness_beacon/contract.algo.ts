@@ -1,11 +1,9 @@
 import {
-  abimethod,
   arc4,
   assert,
   assertMatch,
   BoxMap,
-  contract,
-  Contract,
+  clone,
   emit,
   ensureBudget,
   Global,
@@ -14,6 +12,7 @@ import {
   itxn,
   op,
   OpUpFeeSource,
+  readonly,
   Txn,
   uint64,
   VrfVerify,
@@ -38,56 +37,58 @@ import {
   NOTE_CANCEL_PAYMENT,
   NOTE_CLOSE_OUT_REMAINDER,
   NOTE_FEES_PAYMENT,
-  RandomnessBeaconCallerStub,
+  RandomnessBeaconRequesterStub,
   RandomnessRequest,
+  RandomnessRequestCosts,
   RequestCancelled,
   RequestCreated,
   RequestFulfilled,
+  VrfProof,
+  VrfPublicKey,
 } from './types.algo'
 
-@contract({ name: 'RandomnessBeacon', avmVersion: 11 })
-export class RandomnessBeacon extends classes(Managable, Pausable, Contract) implements arc4.ConventionalRouting {
+export class RandomnessBeacon extends classes(Managable, Pausable) implements arc4.ConventionalRouting {
   /* the public key used to verify VRF proofs */
-  publicKey = GlobalState<arc4.StaticBytes<32>>({ key: 'publicKey' })
+  publicKey = GlobalState<VrfPublicKey>({ key: 'publicKey' })
 
   /* the next requestId index, useful for tracking. set to 1 initially */
-  nextRequestId = GlobalState<arc4.UintN64>({ key: 'nextRequestId', initialValue: new arc4.UintN64(1) })
+  nextRequestId = GlobalState<uint64>({ key: 'nextRequestId', initialValue: 1 })
 
   /* box map of randomness requests */
-  requests = BoxMap<arc4.UintN64, RandomnessRequest>({ keyPrefix: 'requests' })
+  requests = BoxMap<uint64, RandomnessRequest>({ keyPrefix: 'requests' })
 
   /**
    * Max rounds in the future ([current round] + maxFutureRounds) allowed for requests
    */
-  maxFutureRounds = GlobalState<arc4.UintN64>({
+  maxFutureRounds = GlobalState<uint64>({
     key: 'maxFutureRounds',
   })
 
   /**
    * Max number of pending requests allowed
    */
-  maxPendingRequests = GlobalState<arc4.UintN64>({
+  maxPendingRequests = GlobalState<uint64>({
     key: 'maxPendingRequests',
   })
 
   /**
    * Stale request timeout in rounds (after which a request can be cancelled after RandomnessRequest.round)
    */
-  staleRequestTimeout = GlobalState<arc4.UintN64>({
+  staleRequestTimeout = GlobalState<uint64>({
     key: 'staleRequestTimeout',
   })
 
   /* total number of pending requests, useful for limiting load on the contract */
-  totalPendingRequests = GlobalState<arc4.UintN64>({ key: 'totalPendingRequests', initialValue: new arc4.UintN64(0) })
+  totalPendingRequests = GlobalState<uint64>({ key: 'totalPendingRequests', initialValue: 0 })
 
   /**
    *
    * Deletes a requests box and decrements the totalPendingRequests
    * @param requestId request to delete
    */
-  private deleteRequest(requestId: arc4.UintN64): void {
+  private _deleteRequest(requestId: uint64): void {
     // decrement pending requests
-    this.totalPendingRequests.value = new arc4.UintN64(this.totalPendingRequests.value.native - 1)
+    this.totalPendingRequests.value -= 1
     // delete the box
     this.requests(requestId).delete()
   }
@@ -97,11 +98,11 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
    * @returns the next available request ID
    * @description increments the nextRequestId global state + 1
    */
-  private getNextRequestId(): arc4.UintN64 {
+  private _getNextRequestId(): uint64 {
     // get the current value
     const requestId = this.nextRequestId.value
     // increment on global state
-    this.nextRequestId.value = new arc4.UintN64(requestId.native + 1)
+    this.nextRequestId.value += 1
 
     return requestId
   }
@@ -114,15 +115,15 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
    * @param staleRequestTimeout the number of rounds after the target round a request can be cancelled
    */
   createApplication(
-    publicKey: arc4.StaticBytes<32>,
-    maxPendingRequests: arc4.UintN64,
-    maxFutureRounds: arc4.UintN64,
-    staleRequestTimeout: arc4.UintN64,
+    publicKey: VrfPublicKey,
+    maxPendingRequests: uint64,
+    maxFutureRounds: uint64,
+    staleRequestTimeout: uint64,
   ): void {
     // validate config params, publicKey is assumed to be valid
-    assert(maxPendingRequests.native > 0, ERR_MAX_PENDING_REQUESTS_CANNOT_BE_ZERO)
-    assert(maxFutureRounds.native > 0, ERR_MAX_FUTURE_ROUNDS_CANNOT_BE_ZERO)
-    assert(staleRequestTimeout.native > 0, ERR_TIMEOUT_CANNOT_BE_ZERO)
+    assert(maxPendingRequests > 0, ERR_MAX_PENDING_REQUESTS_CANNOT_BE_ZERO)
+    assert(maxFutureRounds > 0, ERR_MAX_FUTURE_ROUNDS_CANNOT_BE_ZERO)
+    assert(staleRequestTimeout > 0, ERR_TIMEOUT_CANNOT_BE_ZERO)
     // store the public key we will accept verified proofs from
     this.publicKey.value = publicKey
     // store the max pending requests
@@ -142,7 +143,7 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
   deleteApplication(): void {
     this.onlyManager()
     // cannot have any pending requests
-    assert(this.totalPendingRequests.value.native === 0, ERR_NO_PENDING_REQUESTS)
+    assert(this.totalPendingRequests.value === 0, ERR_NO_PENDING_REQUESTS)
     // send remaining algos back to the manager
     itxn
       .payment({
@@ -152,6 +153,20 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
       .submit()
   }
 
+  /*
+   * Internal function to create a request box and store the request
+   */
+  private _createRequest(request: RandomnessRequest): uint64 {
+    // get next available requestId
+    const requestId = this._getNextRequestId()
+    // store request in box
+    this.requests(requestId).value = clone(request)
+    // increment the total pending requests
+    this.totalPendingRequests.value += 1
+    // return requestId
+    return requestId
+  }
+
   /**
    *
    * @param requesterAddress who the request is on behalf of?
@@ -159,26 +174,21 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
    * @param costsPayment payment covering txnFees + boxCost
    * @returns a unique request ID to be used to identify the request
    */
-  public createRequest(
-    requesterAddress: arc4.Address,
-    round: arc4.UintN64,
-    costsPayment: gtxn.PaymentTxn,
-  ): arc4.UintN64 {
+  public createRequest(requesterAddress: arc4.Address, round: uint64, costsPayment: gtxn.PaymentTxn): uint64 {
     // when not paused, users can create new requests
     this.whenNotPaused()
     // ensure there is capacity for more pending requests
-    assert(this.totalPendingRequests.value.native < this.maxPendingRequests.value.native, ERR_MAX_PENDING_REQUESTS)
+    assert(this.totalPendingRequests.value < this.maxPendingRequests.value, ERR_MAX_PENDING_REQUESTS)
     // ensure the requested round is in the future
-    assert(round.native > Global.round, ERR_MUST_BE_FUTURE_ROUND)
+    assert(round > Global.round, ERR_MUST_BE_FUTURE_ROUND)
     // ensure the requested round is within the allowed future round limit
-    assert(round.native <= Global.round + this.maxFutureRounds.value.native, 'error: round exceeds max future round')
+    assert(round <= Global.round + this.maxFutureRounds.value, 'error: round exceeds max future round')
     // get caller app id
     const callerAppId = Global.callerApplicationId
     // this method should only be callable by app inner txns
     assert(callerAppId !== 0, ERR_MUST_BE_CALLED_FROM_APP)
-    // get fees and costs
-    const [txnFees, boxCost] = this.getCosts().native
-
+    // get minimimum expected fees and costs
+    const { fees, boxMbr } = this.getCosts()
     // ensure costsPayment covers fees and boxcost
     assertMatch(
       costsPayment,
@@ -186,51 +196,49 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
         receiver: Global.currentApplicationAddress,
         amount: {
           // should cover the required fees + box storage cost (will be refunded)
-          greaterThanEq: txnFees.native + boxCost.native,
+          greaterThanEq: fees + boxMbr,
         },
       },
       ERR_COSTS_PAYMENT_MUST_BE_VALID,
     )
 
     // calc fees paid = total - boxCost
-    const feesPaid: uint64 = costsPayment.amount - boxCost.native
+    const feesPaid: uint64 = costsPayment.amount - boxMbr
 
-    const request = new RandomnessRequest({
-      createdAt: new arc4.UintN64(Global.round),
-      requesterAppId: new arc4.UintN64(callerAppId),
+    // make this readonly
+    const r: RandomnessRequest = {
+      createdAt: Global.round,
+      requesterAppId: callerAppId,
       requesterAddress: requesterAddress,
       round: round,
-      feePaid: new arc4.UintN64(feesPaid),
-      boxCost: boxCost,
+      costs: {
+        fees: feesPaid,
+        boxMbr: boxMbr,
+      },
+    }
+
+    // create new request, store box, update state etc
+    const requestId = this._createRequest(r)
+
+    // emit created event
+    emit<RequestCreated>({
+      requestId: requestId,
+      requesterAppId: r.requesterAppId,
+      requesterAddress: r.requesterAddress,
+      round: r.round,
     })
 
-    // get next available requestId
-    const requestId = this.getNextRequestId()
-    // store request in box
-    this.requests(requestId).value = request.copy()
-    // increment the total pending requests
-    this.totalPendingRequests.value = new arc4.UintN64(this.totalPendingRequests.value.native + 1)
-
-    // emit event
-    emit(
-      new RequestCreated({
-        requestId: requestId,
-        requesterAppId: new arc4.UintN64(callerAppId),
-        requesterAddress: requesterAddress,
-        round: round,
-      }),
-    )
     // return id to caller
     return requestId
   }
 
-  public cancelRequest(requestId: arc4.UintN64): void {
+  public cancelRequest(requestId: uint64): void {
     // get value from the box
-    const request: RandomnessRequest = this.requests(requestId).value.copy()
+    const request: RandomnessRequest = clone(this.requests(requestId).value)
     // cannot cancel until >= (request.round + staleRequestTimeout)
-    assert(Global.round >= request.round.native + this.staleRequestTimeout.value.native, ERR_REQUEST_MUST_BE_STALE)
+    assert(Global.round > request.round + this.staleRequestTimeout.value, ERR_REQUEST_MUST_BE_STALE)
 
-    let amountToRefund: uint64 = request.boxCost.native + request.feePaid.native
+    let amountToRefund: uint64 = request.costs.boxMbr + request.costs.fees
 
     // if the caller is not the requester, pay them the cost of cancellation
     if (request.requesterAddress.native !== Txn.sender) {
@@ -266,15 +274,13 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
       .submit()
 
     // emit cancelled event
-    emit(
-      new RequestCancelled({
-        requestId: requestId,
-        requesterAppId: request.requesterAppId,
-        requesterAddress: request.requesterAddress,
-      }),
-    )
+    emit<RequestCancelled>({
+      requestId: requestId,
+      requesterAppId: request.requesterAppId,
+      requesterAddress: request.requesterAddress,
+    })
 
-    this.deleteRequest(requestId)
+    this._deleteRequest(requestId)
   }
 
   /**
@@ -282,24 +288,23 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
    * @param requestId the ID of the VRF request
    * @param proof the VRF proof output using the `targetRound` block seed of the targeted RandomnessBeaconRequest
    */
-  public completeRequest(requestId: arc4.UintN64, proof: arc4.StaticBytes<80>): void {
+  public completeRequest(requestId: uint64, proof: VrfProof): void {
     // only allow the manager to call, they should be only one with access to private key
     this.onlyManager()
     // get request from the box
-    const request: RandomnessRequest = this.requests(requestId).value.copy()
+    const request: RandomnessRequest = clone(this.requests(requestId).value)
     // get block seed of the target round
-    const blockSeed = op.Block.blkSeed(request.round.native)
+    const blockSeed = op.Block.blkSeed(request.round)
     // increase opcode budget using app account balance (should be pre-funded by the caller to cover this cost)
     ensureBudget(5700, OpUpFeeSource.GroupCredit)
     // verify vrf proof
-    const [output, verified] = op.vrfVerify(VrfVerify.VrfAlgorand, blockSeed, proof.bytes, this.publicKey.value.bytes)
+    const [output, verified] = op.vrfVerify(VrfVerify.VrfAlgorand, blockSeed, proof, this.publicKey.value)
     // must be verified
     assert(verified, ERR_PROOF_MUST_BE_VALID)
 
-    // call the callback function of the caller app
-    const r = arc4.abiCall(RandomnessBeaconCallerStub.prototype.fulfillRandomness, {
-      appId: request.requesterAppId.native,
-      args: [requestId, request.requesterAddress, new arc4.StaticBytes<64>(output)],
+    const r = arc4.abiCall<typeof RandomnessBeaconRequesterStub.prototype.fulfillRandomness>({
+      appId: request.requesterAppId,
+      args: [requestId, request.requesterAddress, output],
       fee: 0,
     })
 
@@ -307,7 +312,7 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
     itxn
       .payment({
         receiver: Txn.sender,
-        amount: request.feePaid.native,
+        amount: request.costs.fees,
         note: NOTE_FEES_PAYMENT,
         fee: 0,
       })
@@ -317,32 +322,31 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
     itxn
       .payment({
         receiver: request.requesterAddress.native,
-        amount: request.boxCost.native,
+        amount: request.costs.boxMbr,
         note: NOTE_BOX_MBR_REFUND,
         fee: 0,
       })
       .submit()
 
-    // dispatch fulfilled event
-    emit(
-      new RequestFulfilled({
-        requestId: requestId,
-        requesterAppId: request.requesterAppId,
-        requesterAddress: request.requesterAddress,
-      }),
-    )
+    // emit fulfilled event
+    emit<RequestFulfilled>({
+      requestId: requestId,
+      requesterAppId: request.requesterAppId,
+      requesterAddress: request.requesterAddress,
+      vrfOutput: output,
+    })
 
     // delete the box
-    this.deleteRequest(requestId)
+    this._deleteRequest(requestId)
   }
 
   /**
    *
    * Convenience function to get associated costs with using the beacon service
-   * @returns arc4.Tuple<[txnFees, boxCost] - tuple of the required txn fees and box cost (that will be refunded)
+   * @returns RandomnessRequestCosts object containing fees and boxMbr costs
    */
-  @abimethod({ readonly: true })
-  public getCosts(): arc4.Tuple<[arc4.UintN64, arc4.UintN64]> {
+  @readonly
+  public getCosts(): RandomnessRequestCosts {
     // 8x the normal txn budget to use vrf_verify alone
     // 2 inner txns, fees to caller and box refund to requeste
     // 1x app call txn (base external txn)
@@ -352,22 +356,11 @@ export class RandomnessBeacon extends classes(Managable, Pausable, Contract) imp
     const numRequiredTxns: uint64 = 8 + 2 + 1 + 1
     // work out required fee
     const txnFees: uint64 = Global.minTxnFee * numRequiredTxns
+    const keySize: uint64 = this.requests.keyPrefix.length + arc4.sizeOf<uint64>() /* size of uint64 in bytes = 8 */
+    const boxSize: uint64 = arc4.sizeOf<RandomnessRequest>()
 
-    // just create a dummy request to calculate the mbr cost
-    const fakeRequest = new RandomnessRequest({
-      createdAt: new arc4.UintN64(0),
-      requesterAppId: new arc4.UintN64(0),
-      requesterAddress: new arc4.Address(Global.zeroAddress),
-      round: new arc4.UintN64(0),
-      feePaid: new arc4.UintN64(0),
-      boxCost: new arc4.UintN64(0),
-    })
+    const boxMbr: uint64 = BOX_CREATE_COST + BOX_BYTE_COST * (keySize + boxSize)
 
-    const keySize: uint64 = this.requests.keyPrefix.length + new arc4.UintN64(0).bytes.length
-    const boxSize: uint64 = fakeRequest.bytes.length
-
-    const boxCost: uint64 = BOX_CREATE_COST + BOX_BYTE_COST * (keySize + boxSize)
-
-    return new arc4.Tuple(new arc4.UintN64(txnFees), new arc4.UintN64(boxCost))
+    return { fees: txnFees, boxMbr: boxMbr }
   }
 }

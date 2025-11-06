@@ -1,4 +1,4 @@
-import { abimethod, arc4, Contract, err, uint64 } from '@algorandfoundation/algorand-typescript'
+import { abimethod, arc4, bytes, Contract, err, uint64 } from '@algorandfoundation/algorand-typescript'
 
 export const ERR_PROOF_MUST_BE_VALID = 'proof must be valid'
 export const ERR_COSTS_PAYMENT_MUST_BE_VALID = 'costs payment must be valid'
@@ -18,83 +18,152 @@ export const NOTE_BOX_MBR_REFUND = 'box mbr refund'
 export const NOTE_FEES_PAYMENT = 'fees payment for caller'
 export const NOTE_CANCEL_PAYMENT = 'cancellation fees for caller'
 export const NOTE_CLOSE_OUT_REMAINDER = 'close out remainder to manager'
+
+/**
+ * Types
+ */
+
+/**
+ * The VRF keypair public key type (32 bytes)
+ */
+export type VrfPublicKey = bytes<32>
+
+/**
+ * The VRF proof type (will always be 80 bytes)
+ */
+export type VrfProof = bytes<80>
+
+/**
+ * The VRF output type (will always be 64 bytes)
+ */
+export type VrfOutput = bytes<64>
+
+/**
+ * The function signature for the fulfillRandomness function
+ */
 export type FulfillRandomnessFunction = (
   /* request id as reference */
-  requestId: arc4.UintN64,
+  requestId: uint64,
   /* the caller/initiator of the request */
   requesterAddress: arc4.Address,
   /* vrf output */
-  output: arc4.StaticBytes<64>,
+  output: VrfOutput,
 ) => void
 
-export interface RandomnessBeaconCaller {
+/**
+ * Interface that a contract must implement to be able to receive VRF outputs from the RandomnessBeacon
+ */
+export interface IRandomnessBeaconRequester {
   /**
-   * The function to invoke when closing out of this application
+   * The function to invoke when a randomness request is fulfilled
    */
   fulfillRandomness: FulfillRandomnessFunction
 }
 
-// events
+/**
+ * Group the costs associated with making a randomness request
+ */
+export type RandomnessRequestCosts = {
+  /**
+   * the transaction fees paid in advance for the completeRequest() caller
+   */
+  fees: uint64
+  /**
+   * The box cost paid for the request (MBR increase)
+   */
+  boxMbr: uint64
+}
 
-export class RequestCreated extends arc4.Struct<{
-  /* the unique ID of the request */
-  requestId: arc4.UintN64
-  /* the application ID of the contract making the VRF request */
-  requesterAppId: arc4.UintN64
-  /* the address of the account making the VRF request, not the app address */
-  requesterAddress: arc4.Address
-  /* the round at which the VRF of the block seed is requested */
-  round: arc4.UintN64
-}> {}
-
-export class RequestCancelled extends arc4.Struct<{
-  /* the unique ID of the request */
-  requestId: arc4.UintN64
-  /* the application ID of the contract making the VRF request */
-  requesterAppId: arc4.UintN64
-  /* the address of the account making the VRF request, not the app address */
-  requesterAddress: arc4.Address
-}> {}
-
-export class RequestFulfilled extends arc4.Struct<{
-  /* the unique ID of the request */
-  requestId: arc4.UintN64
-  /* the application ID of the contract making the VRF request */
-  requesterAppId: arc4.UintN64
-  /* the address of the account making the VRF request, not the app address */
-  requesterAddress: arc4.Address
-  // TODO: include the vrf output
-}> {}
-
-export class RandomnessRequest extends arc4.Struct<{
+/**
+ * The randomness request to be stored in a box
+ */
+export type RandomnessRequest = {
   /* the round the request was created at */
-  createdAt: arc4.UintN64
+  createdAt: uint64
   /* the application ID of the contract making the VRF request */
-  requesterAppId: arc4.UintN64
+  requesterAppId: uint64
   /* the address of the account making the VRF request, not the app address */
   requesterAddress: arc4.Address
   /* the round at which the VRF of the block seed is requested */
-  round: arc4.UintN64
+  round: uint64
   /* fee paid in advance for the app call, vrf_verify opcode cost (0.008), the inner txn fulfillRequest (0.001) */
-  feePaid: arc4.UintN64
-  /* box cost paid (can be refunded) */
-  boxCost: arc4.UintN64
-  /* TODO: implement ability for user to pass data to be hashed with vrf output in future */
-  // userData?: arc4.DynamicBytes
-}> {}
+  costs: RandomnessRequestCosts
+}
+
+/**
+ * Event types emitted by the RandomnessBeacon contract
+ */
+
+/**
+ * Event emitted when a randomness request is created
+ */
+export type RequestCreated = {
+  /**
+   * the unique ID of the request
+   */
+  requestId: uint64
+  /**
+   * the application ID of the contract making the VRF request
+   */
+  requesterAppId: uint64
+  /**
+   * the address of the account making the VRF request, not the app address
+   */
+  requesterAddress: arc4.Address
+  /**
+   * the round at which the VRF of the block seed is requested
+   */
+  round: uint64
+}
+
+/**
+ * Event emitted when a randomness request is cancelled
+ */
+export type RequestCancelled = {
+  /**
+   * the unique ID of the request
+   */
+  requestId: uint64
+  /**
+   * the application ID of the contract making the VRF request
+   */
+  requesterAppId: uint64
+  /**
+   * the address of the account making the VRF request, not the app address
+   */
+  requesterAddress: arc4.Address
+}
+
+/**
+ * Event emitted when a randomness request is fulfilled
+ */
+export type RequestFulfilled = {
+  /**
+   * the unique ID of the request
+   */
+  requestId: uint64
+  /**
+   * the application ID of the contract making the VRF request
+   */
+  requesterAppId: uint64
+  /**
+   * the address of the account making the VRF request, not the app address
+   */
+  requesterAddress: arc4.Address
+  /**
+   * the VRF output
+   */
+  vrfOutput: VrfOutput
+}
 
 /**
  * A stub class representing the interface of the caller contract that will receive the VRF output
  * only fulfillRandomness is required
  */
-export class RandomnessBeaconCallerStub extends Contract implements RandomnessBeaconCaller {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+export class RandomnessBeaconRequesterStub extends Contract implements IRandomnessBeaconRequester {
   @abimethod()
-  public fulfillRandomness(
-    requestId: arc4.UintN64,
-    requesterAddress: arc4.Address,
-    output: arc4.StaticBytes<64>,
-  ): void {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  public fulfillRandomness(requestId: uint64, requesterAddress: arc4.Address, output: VrfOutput): void {
     err('not implemented')
   }
 }
