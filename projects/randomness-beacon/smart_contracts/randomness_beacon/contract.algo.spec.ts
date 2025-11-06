@@ -21,6 +21,7 @@ import { RandomnessRequest, RequestCreated, VrfOutput, VrfProof, VrfPublicKey } 
 
 // Mock the op module from algorand-typescript, not the testing library
 vi.mock(import('@algorandfoundation/algorand-typescript-testing/internal'), async (importOriginal) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mod: any = await importOriginal()
 
   return {
@@ -59,7 +60,7 @@ describe('RandomnessBeacon contract', () => {
     const { publicKey, secretKey } = libvrf.keypair()
 
     beaconContract.createApplication(
-      publicKey as any as VrfPublicKey,
+      publicKey as unknown as VrfPublicKey,
       maxPendingRequests, // max pending requests
       maxFutureRound, // max future round
       staleRequestTimeout, // stale request timeout
@@ -71,7 +72,7 @@ describe('RandomnessBeacon contract', () => {
     spy.on.createRequest((itxnContext) => {
       const round: uint64 = arc4.decodeArc4(itxnContext.appArgs(2))
       const requesterAddress: arc4.Address = arc4.decodeArc4(itxnContext.appArgs(1))
-      const costsPayment: gtxn.PaymentTxn = itxnContext.itxns![0] as any
+      const costsPayment: gtxn.PaymentTxn = itxnContext.itxns![0] as unknown as gtxn.PaymentTxn
 
       // ensure there is capacity for more pending requests
       assert(
@@ -106,9 +107,9 @@ describe('RandomnessBeacon contract', () => {
 
       const request: RandomnessRequest = {
         createdAt: Global.round,
-        round: round,
         requesterAppId: exampleCallerAppId,
         requesterAddress: requesterAddress,
+        round: round,
         costs: {
           fees: feesPaid,
           boxMbr: boxMbr,
@@ -130,25 +131,6 @@ describe('RandomnessBeacon contract', () => {
 
       itxnContext.setReturnValue(requestId)
     })
-
-    //TODO: fix completeRequest spy see below commented test also
-    // spy.on.completeRequest((itxnContext) => {
-    //   console.log('hi')
-
-    //   // workaround lack of vrfVerify in testing
-    //   // just use libvrf instead
-    //   const requestId: uint64 = arc4.decodeArc4(itxnContext.appArgs(1))
-    //   const proof: VrfProof = arc4.decodeArc4(itxnContext.appArgs(2))
-
-    //   const request = beaconContract.requests(requestId).value
-
-    //   const blockSeed = op.Block.blkSeed(request.round)
-
-    //   const { output, result } = libvrf.verify(beaconContract.publicKey, proof, blockSeed)
-
-    //   // TODO: call fulfillRandomness on the requester app
-    //   // ommited due to ApplicationSpy not working as expected in tests
-    // })
 
     // add spy to test context
     ctx.addApplicationSpy(spy)
@@ -180,8 +162,8 @@ describe('RandomnessBeacon contract', () => {
     // generate new a new account to represent the requester
     const requesterAccount = ctx.any.account()
 
+    // get costs
     const { fees, boxMbr } = beaconContract.getCosts()
-
     // send to the caller app (this will pay beacon on our behalf)
     const costPayment = ctx.any.txn.payment({
       sender: requesterAccount,
@@ -206,7 +188,6 @@ describe('RandomnessBeacon contract', () => {
     expect(beaconContract.totalPendingRequests.value).toEqual(1)
     // verify box on the beacon app exists under the pending requestId
     const storedRequest = beaconContract.requests(requestId).value
-
     // check everything stored correctly
     expect(BigInt(storedRequest.createdAt)).toBeLessThan(BigInt(Global.round))
     expect(storedRequest.requesterAppId).toEqual(exampleCallerApp.id)
@@ -219,19 +200,16 @@ describe('RandomnessBeacon contract', () => {
   // TODO: fix test, ApplicationSpy not working as expected, the hook never gets called
   it('Can call completeRequest()', () => {
     const { beaconContract, beaconApp, secretKey, manager } = deploy(10, 100, 1000)
-
     // create example caller contract
     const exampleCallerContract = ctx.contract.create(ExampleCaller)
     // create application (pass existing beacon app)
     exampleCallerContract.createApplication(beaconApp)
     // get handle to app on ledger
     const exampleCallerApp = ctx.ledger.getApplicationForContract(exampleCallerContract)
-    // get costs
-    const { fees, boxMbr } = beaconContract.getCosts()
-
     // make new account to represent requester
     const requesterAccount = ctx.any.account()
-
+    // get costs
+    const { fees, boxMbr } = beaconContract.getCosts()
     // build fee payment
     const feePayment = ctx.any.txn.payment({
       sender: requesterAccount,
@@ -241,8 +219,6 @@ describe('RandomnessBeacon contract', () => {
 
     // set for test so ApplicationSpy hooks know
     exampleCallerAppId = exampleCallerApp.id
-
-    console.log('exampleCallerApp.address:', exampleCallerApp.address)
 
     // set default sender to requester
     ctx.defaultSender = requesterAccount
@@ -276,8 +252,11 @@ describe('RandomnessBeacon contract', () => {
     mockedVrfVerify.mockImplementation(
       (
         s: VrfVerify,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         message: bytes,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         proof: bytes | bytes<80>,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         publicKey: bytes | bytes<32>,
       ): readonly [bytes<64>, boolean] => {
         //console.log(message)
@@ -285,19 +264,17 @@ describe('RandomnessBeacon contract', () => {
 
         console.log('vrfVerify mock implementation called')
 
+        // is real verification really needed for these tests? probably not
         // console.log('message =', message)
         // console.log('proof =', proof)
         // console.log('publicKey =', publicKey)
 
-        // const { output, result } = libvrf.verify(
-        //   bytesToUint8Array(publicKey),
-        //   bytesToUint8Array(proof),
-        //   bytesToUint8Array(message),
-        // )
+        // const { output, result } = libvrf.verify(publicKey.toString(), proof.toString(), message.toString())
         // // console.log(`output = ${output} result = ${result}`)
 
+        // console.log('output, result =', output, result)
         // return [Bytes(output) as any as VrfOutput, Boolean(result === 0)]
-        return [Bytes(new Uint8Array(64).fill(7)) as any as VrfOutput, true]
+        return [Bytes(new Uint8Array(64).fill(7)) as unknown as VrfOutput, true]
       },
     )
 
@@ -311,11 +288,33 @@ describe('RandomnessBeacon contract', () => {
     // dummy call to test mock
     op.vrfVerify(VrfVerify.VrfAlgorand, blockSeed, Bytes(proof), beaconContract.publicKey.value)
     // expect mock to have been called (mock function always return true, and 64 bytes filled with 7)
-    expect(mockedVrfVerify).toHaveReturnedWith([Bytes(new Uint8Array(64).fill(7)) as any as VrfOutput, true])
+    expect(mockedVrfVerify).toHaveReturnedWith([Bytes(new Uint8Array(64).fill(7)) as unknown as VrfOutput, true])
+
+    //create new application spy
+    const spy = new ApplicationSpy(ExampleCaller)
+
+    spy.on.fulfillRandomness((itxnContext) => {
+      const requestId: uint64 = arc4.decodeArc4(itxnContext.appArgs(1))
+      //const requesterAddress: arc4.Address = arc4.decodeArc4(itxnContext.appArgs(2))
+      // first 16 bits are byte array length (not sure why not native bytes?)
+      const output: VrfOutput = itxnContext.appArgs(3).slice(2) as unknown as VrfOutput
+      console.log(requestId)
+      console.log(output)
+      // set the output in the requester contract
+      exampleCallerContract.output.value = output
+      // increment total fulfilled
+      exampleCallerContract.totalFulfilled.value += 1
+    })
+
+    ctx.addApplicationSpy(spy)
 
     // change default sender to manager to call completeRequest (onlyManager() is called)
     ctx.defaultSender = manager
     // todo: investigate error
-    beaconContract.completeRequest(requestId, Bytes(proof) as any as VrfProof)
+    beaconContract.completeRequest(requestId, Bytes(proof) as unknown as VrfProof)
+
+    // expect example caller contract to have been fulfilled, and output to match as expected
+    expect(exampleCallerContract.totalFulfilled.value).toEqual(1)
+    expect(exampleCallerContract.output.value).toStrictEqual(Bytes(new Uint8Array(64).fill(7)) as unknown as VrfOutput)
   })
 })
