@@ -9,7 +9,8 @@
     "build": "npx tsc",
     "test": "echo \"Error: no test specified\" && exit 1",
     "format": "prettier --write .",
-    "generate-keypair": "npx ts-node scripts/generate-keypair.ts"
+    "generate-keypair": "npx ts-node scripts/generate-keypair.ts",
+    "link": "npm install --prefix ../randomness-beacon && npm run --prefix ../randomness-beacon build && cp ../randomness-beacon/smart_contracts/artifacts/randomness_beacon/RandomnessBeaconClient.ts src/clients/RandomnessBeaconClient.ts"
   },
   "license": "ISC",
   "devDependencies": {

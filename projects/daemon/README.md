@@ -14,22 +14,23 @@ A worker that polls the beacon app at regular intervals, checks for pending rand
 
 ### Environment Variables (Required)
 
-| Name                     | Value                                                             |
-| ------------------------ | ----------------------------------------------------------------- |
-| `LOG_LEVEL`              | The log severity level (optional! default: info)                  |
-| `POLL_INTERVAL`          | How often should the daemon poll the `Beacon App` in milliseconds |
-| `VRF_KEYPAIR_SECRET_KEY` | Base64 string version of the vrf keypair secret key               |
-| `BEACON_APP_ID`          | AppID of the `Beacon App`                                         |
-| `MANAGER_MNEMONIC`       | 25-word mnemonic of the manager                                   |
-| `ALGOD_TOKEN`            | Algod token                                                       |
-| `ALGOD_SERVER`           | Algod host                                                        |
-| `ALGOD_PORT`             | Algod port                                                        |
+| Name               | Value                                                             |
+| ------------------ | ----------------------------------------------------------------- |
+| `LOG_LEVEL`        | The log severity level (optional! default: info)                  |
+| `POLL_INTERVAL`    | How often should the daemon poll the `Beacon App` in milliseconds |
+| `VRF_SECRET_KEY`   | Base64 string version of the vrf keypair secret key               |
+| `BEACON_APP_ID`    | AppID of the `Beacon App`                                         |
+| `MANAGER_MNEMONIC` | 25-word mnemonic of the manager                                   |
+| `ALGOD_TOKEN`      | Algod token                                                       |
+| `ALGOD_SERVER`     | Algod host                                                        |
+| `ALGOD_PORT`       | Algod port                                                        |
 
 ### Local Testing
 
 1. Installed required dependencies with `npm install`
-2. Run `cp .env.example .env` then configure the required environment variables
-3. Start daemon in dev mode with `npm run dev`
+2. Run `npm run link` to generate and link client
+3. Run `cp .env.example .env` then configure the required environment variables
+4. Start daemon in dev mode with `npm run dev`
 
 ### Production Deployment
 
@@ -37,8 +38,9 @@ You can easily deploy this app to cloud services, target NodeJS v22.X or higher 
 
 1. Configure the environment with all required environment variables (check `.env.example`)
 2. Specify the working directory as `projects/daemon` (if required)
-3. Specify `npm run build` as the build command
-4. Specify `npm run start` to start the daemon
+3. Run `npm run link` to generate and link client
+4. Specify `npm run build` as the build command
+5. Specify `npm run start` to start the daemon
 
 ## Utils
 

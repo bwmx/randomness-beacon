@@ -1,6 +1,6 @@
 import { TransactionSigner } from 'algosdk'
 import libvrf from '../../libvrf'
-import { RandomnessBeaconClient } from './contracts/RandomnessBeaconClient'
+import { RandomnessBeaconClient } from './clients/RandomnessBeaconClient'
 import config from './config'
 
 const { algorand } = config

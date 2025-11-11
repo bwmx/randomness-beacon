@@ -11,5 +11,5 @@ export default {
   pollInterval: Number(mustGetEnv('POLL_INTERVAL')),
   beaconAppId: BigInt(mustGetEnv('BEACON_APP_ID')),
   managerAccount: mnemonicToSecretKey(mustGetEnv('MANAGER_MNEMONIC')),
-  vrfSecretKey: Buffer.from(mustGetEnv('VRF_KEYPAIR_SECRET_KEY'), 'base64'),
+  vrfSecretKey: Buffer.from(mustGetEnv('VRF_SECRET_KEY'), 'base64'),
 }
