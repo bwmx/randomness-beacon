@@ -1,0 +1,2 @@
+allowBuilds:
+  '@bwmx/algorand-vrf-utils-ts@https://codeload.github.com/bwmx/algorand-vrf-utils-ts/tar.gz/92c8b60617feb17f5327f17d47020595eb025818': true

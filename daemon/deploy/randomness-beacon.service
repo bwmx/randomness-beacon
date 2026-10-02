@@ -1,0 +1,51 @@
+# systemd unit for the randomness beacon daemon.
+# Install steps: daemon/README.md ("Linux (systemd)").
+# Paths assume the repo is checked out at /opt/randomness-beacon and secrets live in /etc/randomness-beacon.
+
+[Unit]
+Description=Randomness beacon daemon
+Documentation=https://github.com/bwmx/randomness-beacon
+After=network-online.target
+Wants=network-online.target
+# Keep retrying (e.g. algod unreachable at boot); fix bad config and it recovers on the next restart.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=beacon
+Group=beacon
+WorkingDirectory=/opt/randomness-beacon/daemon
+EnvironmentFile=/etc/randomness-beacon/daemon.env
+Environment=NODE_ENV=production
+# systemd's PATH covers /usr/bin and /usr/local/bin; use an absolute node path for nvm-style installs.
+ExecStart=/usr/bin/env node dist/index.js
+# SIGTERM lets the in-flight poll finish before exiting.
+KillSignal=SIGTERM
+TimeoutStopSec=60
+Restart=always
+RestartSec=10
+
+# Hardening. The daemon only needs outbound network access and read access to its checkout.
+# No MemoryDenyWriteExecute: V8's JIT and the VRF WebAssembly module need writable executable memory.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

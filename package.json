@@ -1,0 +1,62 @@
+{
+  "name": "randomness-beacon",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Randomness beacon smart contract (VRF oracle)",
+  "main": "smart_contracts/index.ts",
+  "scripts": {
+    "build": "algokit compile ts smart_contracts --output-source-map --out-dir artifacts && algokit generate client smart_contracts/artifacts --output {app_spec_dir}/{contract_name}Client.ts",
+    "deploy": "ts-node-dev --transpile-only --watch .env -r dotenv/config smart_contracts/index.ts",
+    "deploy:ci": "ts-node --transpile-only -r dotenv/config smart_contracts/index.ts",
+    "lint": "oxlint smart_contracts daemon/src daemon/scripts",
+    "lint:fix": "oxlint --fix smart_contracts daemon/src daemon/scripts",
+    "audit": "pnpm audit",
+    "format": "oxfmt .",
+    "test": "vitest run --coverage --exclude '**/*.e2e.spec.ts'",
+    "test:watch": "vitest watch",
+    "check-types": "tsc --noEmit",
+    "test:e2e": "vitest run e2e",
+    "build:all": "pnpm run build && pnpm run daemon:build",
+    "test:all": "pnpm run test && pnpm run daemon:test",
+    "check-types:all": "pnpm run check-types && pnpm run daemon:check-types",
+    "format:check": "oxfmt --check .",
+    "daemon:link": "mkdir -p daemon/src/clients && cp smart_contracts/artifacts/randomness_beacon/RandomnessBeaconClient.ts daemon/src/clients/",
+    "daemon:build": "pnpm run daemon:link && rm -rf daemon/dist && tsc -p daemon",
+    "daemon:check-types": "pnpm run daemon:link && tsc -p daemon --noEmit",
+    "daemon:dev": "pnpm run daemon:link && cd daemon && node --env-file-if-exists=.env -r ts-node/register src/index.ts",
+    "daemon:start": "cd daemon && node --env-file-if-exists=.env dist/index.js",
+    "daemon:test": "cd daemon && node -r ts-node/register --test src/*.test.ts",
+    "generate-keypair": "cd daemon && ts-node scripts/generate-keypair.ts"
+  },
+  "dependencies": {
+    "@algorandfoundation/algokit-utils": "^9.1.2",
+    "@algorandfoundation/algorand-typescript": "^1.0.1",
+    "@bwmx/algorand-vrf-utils-ts": "git+https://github.com/bwmx/algorand-vrf-utils-ts.git#92c8b60617feb17f5327f17d47020595eb025818",
+    "algosdk": "^3.5.2",
+    "pino": "^10.1.0",
+    "pino-pretty": "^13.1.2",
+    "polytype": "^0.17.0"
+  },
+  "devDependencies": {
+    "@algorandfoundation/algokit-client-generator": "^6.0.0",
+    "@algorandfoundation/algokit-utils-debug": "^1.0.4",
+    "@algorandfoundation/algorand-typescript-testing": "^1.0.1",
+    "@algorandfoundation/puya-ts": "^1.0.1",
+    "@rollup/plugin-typescript": "^12.1.2",
+    "@tsconfig/node22": "^22.0.0",
+    "@types/node": "^24.6.2",
+    "@vitest/coverage-v8": "4.1.11",
+    "dotenv": "^16.4.7",
+    "oxfmt": "0.71.0",
+    "oxlint": "1.86.0",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.11"
+  },
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=12.6.0"
+  },
+  "packageManager": "pnpm@12.6.0"
+}

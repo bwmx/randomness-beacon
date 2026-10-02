@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "singleQuote": true,
+  "semi": false,
+  "printWidth": 120,
+  "ignorePatterns": [
+    "dist/**",
+    "build/**",
+    "coverage/**",
+    "**/generated/types.d.ts",
+    "**/generated/types.ts",
+    ".idea/**",
+    "smart_contracts/artifacts/**",
+    "daemon/src/clients/**"
+  ]
+}

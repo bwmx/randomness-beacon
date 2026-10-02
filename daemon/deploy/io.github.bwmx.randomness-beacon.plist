@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd job for the randomness beacon daemon (macOS equivalent of randomness-beacon.service).
+  Install steps: daemon/README.md ("macOS (launchd)").
+  As a LaunchDaemon it starts at boot without a login session; REPLACE_WITH_USER is the account it runs as.
+  Node path: /opt/homebrew/bin/node on Apple silicon Homebrew, /usr/local/bin/node on Intel.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>io.github.bwmx.randomness-beacon</string>
+  <key>UserName</key>
+  <string>REPLACE_WITH_USER</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>--env-file=/etc/randomness-beacon/daemon.env</string>
+    <string>dist/index.js</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/opt/randomness-beacon/daemon</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>
+    <string>production</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <!-- Restart whenever it exits; ThrottleInterval spaces restarts 10 s apart. -->
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <!-- Seconds between SIGTERM (finish the in-flight poll) and SIGKILL on stop. -->
+  <key>ExitTimeOut</key>
+  <integer>60</integer>
+  <!-- 0077: files the daemon creates are private to its user. -->
+  <key>Umask</key>
+  <integer>63</integer>
+  <key>StandardOutPath</key>
+  <string>/Library/Logs/randomness-beacon/daemon.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Library/Logs/randomness-beacon/daemon.log</string>
+</dict>
+</plist>

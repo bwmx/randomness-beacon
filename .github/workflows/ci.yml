@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pipx install algokit
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:all
+      - run: pnpm run test:all
+      - run: pnpm run check-types:all
+      - run: pnpm run lint
+      - run: pnpm run format:check
+      - name: Validate service definitions
+        run: |
+          sudo useradd --system --no-create-home beacon
+          sudo install -d -o beacon -g beacon /opt/randomness-beacon/daemon /etc/randomness-beacon
+          sudo touch /etc/randomness-beacon/daemon.env
+          systemd-analyze verify daemon/deploy/randomness-beacon.service
+          python -c "import plistlib; plistlib.load(open('daemon/deploy/io.github.bwmx.randomness-beacon.plist', 'rb'))"
+      - run: algokit localnet start
+      - run: pnpm run test:e2e

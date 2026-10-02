@@ -1,0 +1,33 @@
+name: Deploy TestNet
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    environment: contract-testnet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pipx install algokit
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm run deploy:ci -- randomness_beacon
+        env:
+          ALGOD_SERVER: https://testnet-api.algonode.cloud
+          ALGOD_TOKEN: ''
+          INDEXER_SERVER: https://testnet-idx.algonode.cloud
+          INDEXER_TOKEN: ''
+          DEPLOYER_MNEMONIC: ${{ secrets.DEPLOYER_MNEMONIC }}
+          VRF_KEYPAIR_PUBLIC_KEY: ${{ secrets.VRF_KEYPAIR_PUBLIC_KEY }}
