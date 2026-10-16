@@ -499,9 +499,13 @@ describe('RandomnessBeacon on LocalNet', () => {
       proxy.setOutage(false)
       await waitFor('Polling recovered')
       await expect.poll(() => setup.caller.state.global.totalFulfilled(), { timeout: 15_000 }).toBe(1n)
-      expect(
-        logs.filter((log) => log.msg === 'Request completed' && String(log.requestId) === String(nextId)),
-      ).toHaveLength(1)
+      // Sends confirm in the background, so the daemon may log completion just after the chain shows it.
+      await expect
+        .poll(
+          () =>
+            logs.filter((log) => log.msg === 'Request completed' && String(log.requestId) === String(nextId)).length,
+        )
+        .toBe(1)
 
       // Observe balance changes after startup, even when there are no pending requests.
       const balanceWarnings = logs.filter((log) => log.issue === 'balance' && log.level === 40).length
