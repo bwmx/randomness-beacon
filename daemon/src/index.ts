@@ -4,7 +4,7 @@ import { makeBasicAccountTransactionSigner } from 'algosdk'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { RandomnessBeaconClient, RandomnessRequest, RoundState } from './clients/RandomnessBeaconClient'
 import { loadConfig } from './config'
-import logger, { describe, errorCode } from './logger'
+import logger, { describe, errorCode, failedIndex } from './logger'
 import { canProve, chunk, MAX_GROUP_SIZE, MAX_SEED_AGE, PROOF_VALIDITY_WINDOW, retryDelay, roundsToCheck } from './plan'
 
 const LOW_BALANCE = microAlgo(100_000)
@@ -72,6 +72,21 @@ async function main(signal: AbortSignal) {
     logger.debug({ err }, `${message}: details`)
   }
 
+  // Sends run in the background, so waiting for a confirmation never delays the next block's proof. Their rounds
+  // and requests stay busy until they settle, so a later poll does not send them twice.
+  const busy = new Set<string>()
+  const inFlight = new Set<Promise<void>>()
+  function start(keys: string[], task: () => Promise<void>) {
+    for (const key of keys) busy.add(key)
+    const sent = task()
+      .catch((err) => logger.error({ keys, error: describe(err) }, 'Send failed'))
+      .finally(() => {
+        for (const key of keys) busy.delete(key)
+        inFlight.delete(sent)
+      })
+    inFlight.add(sent)
+  }
+
   // Never pay more than the requester prepaid: fulfillRequest pays us exactly its fees minus the proof fee.
   const fulfillCall = ([requestId, request]: Pending) => ({
     args: { requestId },
@@ -84,6 +99,7 @@ async function main(signal: AbortSignal) {
     lastRound,
   })
   function completed(pending: Pending, lastRound: bigint, txId: string, confirmedRound?: bigint) {
+    requests.delete(pending[0]) // its box is gone; do not send it again before the next listing
     failures.delete(`request:${pending[0]}`)
     logger.info({ ...requestContext(pending, lastRound), txId, confirmedRound }, 'Request completed')
   }
@@ -116,10 +132,10 @@ async function main(signal: AbortSignal) {
 
   async function submitProof(round: bigint, waiting: Pending[], lastRound: bigint) {
     const key = `round:${round}`
-    if (backingOff(key, lastRound)) return
     const context = { round, pending: waiting.length, lastRound }
     try {
-      const { block } = await algod.block(round).do()
+      // Only the seed is needed; warm the suggested-params cache the send reads meanwhile.
+      const [{ block }] = await Promise.all([algod.block(round).headerOnly(true).do(), algorand.getSuggestedParams()])
       const proofCall = {
         args: { round, proof: prove(vrfSecretKey!, block.header.seed).proof },
         // Never pay more than the round's prepaid proof fees (the sum of its requests' shares), paid back to us.
@@ -128,10 +144,12 @@ async function main(signal: AbortSignal) {
         firstValidRound: lastRound + 1n,
         validityWindow: PROOF_VALIDITY_WINDOW,
       }
-      if (fulfills) {
-        // Fast path: deliver in the proof's own block. One failing callback fails the whole group, so fall back
-        // to the proof alone and leave the callbacks to the next block's fulfillment pass.
-        const batch = waiting.slice(0, MAX_GROUP_SIZE - 1)
+      // Deliver in the proof's own block. One failing callback fails the whole group: simulation names it, so retry
+      // without its app's requests (they likely fail alike), or else send the proof alone. Whatever is not
+      // delivered with the proof is sent as soon as it confirms.
+      let batch = fulfills ? waiting.slice(0, MAX_GROUP_SIZE - 1) : []
+      let rest = fulfills ? waiting.slice(batch.length) : []
+      for (;;) {
         const group = beacon.newGroup().submitProof(proofCall)
         for (const pending of batch) group.fulfillRequest(fulfillCall(pending))
         try {
@@ -145,24 +163,52 @@ async function main(signal: AbortSignal) {
           batch.forEach((pending, i) =>
             completed(pending, lastRound, txIds[i + 1], confirmations[i + 1].confirmedRound),
           )
-          return
+          break
         } catch (err) {
-          logger.debug({ ...context, error: describe(err) }, 'Grouped fulfillment failed; submitting the proof alone')
+          if (!batch.length) throw err
+          const at = failedIndex(err)
+          const app = at ? batch[at - 1]?.[1].requesterAppId : undefined
+          const dropped = batch.filter(([, request]) => app === undefined || request.requesterAppId === app)
+          batch = batch.filter((pending) => !dropped.includes(pending))
+          rest = [...dropped, ...rest]
+          const requestIds = dropped.map(([id]) => id)
+          logger.debug({ ...context, requestIds, error: describe(err) }, 'Grouped fulfillment failed; retrying without')
         }
       }
-      const result = await beacon.send.submitProof({ ...proofCall, ...SEND })
-      proven.add(round)
-      failures.delete(key)
-      logger.info(
-        { ...context, txId: result.txIds[0], confirmedRound: result.confirmation.confirmedRound },
-        'Proof submitted',
-      )
+      await Promise.all(chunk(rest, MAX_GROUP_SIZE).map((later) => fulfillBatch(later, lastRound)))
     } catch (err) {
       failed(key, lastRound, context, 'Proof failed', err)
     }
   }
 
+  /** Starts the proofs and fulfillments `waiting` needs that are neither in flight nor backing off. */
+  function dispatch(waiting: Map<bigint, Pending[]>, lastRound: bigint) {
+    const idle = (key: string) => !busy.has(key) && !backingOff(key, lastRound)
+    const ready: Pending[] = []
+    for (const [round, pending] of waiting) {
+      // A request completed since `waiting` was read is no longer cached.
+      if (proven.has(round)) ready.push(...pending.filter(([id]) => requests.has(id) && idle(`request:${id}`)))
+      else if (proves && canProve(round, lastRound) && idle(`round:${round}`)) {
+        // Its requests are delivered with the proof or right after it.
+        const keys = [`round:${round}`, ...pending.map(([id]) => `request:${id}`)]
+        start(keys, () => submitProof(round, pending, lastRound))
+      }
+    }
+    if (!fulfills) return
+    for (const batch of chunk(ready, MAX_GROUP_SIZE)) {
+      start(
+        batch.map(([id]) => `request:${id}`),
+        () => fulfillBatch(batch, lastRound),
+      )
+    }
+  }
+
   async function poll(lastRound: bigint) {
+    // Requests on the round that just committed were created in earlier blocks, so the last poll cached them:
+    // prove it before refreshing anything.
+    const fresh = [...requests].filter(([, request]) => request.round === lastRound)
+    if (fresh.length) dispatch(new Map([[lastRound, fresh]]), lastRound)
+
     const [current, account] = await Promise.all([
       beacon.state.global.getAll(),
       algorand.account.getInformation(relayer.addr),
@@ -244,16 +290,7 @@ async function main(signal: AbortSignal) {
       if (!(kind === 'round' ? waiting : requests).has(BigInt(id))) failures.delete(key)
     }
     logger.debug({ pending: requests.size, lastRound }, 'Polled')
-
-    // Independent transactions, so prove and fulfil in parallel; none of these throw.
-    const work: Promise<void>[] = []
-    const ready: Pending[] = []
-    for (const [round, pending] of waiting) {
-      if (proven.has(round)) ready.push(...pending.filter(([id]) => !backingOff(`request:${id}`, lastRound)))
-      else if (proves && canProve(round, lastRound)) work.push(submitProof(round, pending, lastRound))
-    }
-    if (fulfills) work.push(...chunk(ready, MAX_GROUP_SIZE).map((batch) => fulfillBatch(batch, lastRound)))
-    await Promise.all(work)
+    dispatch(waiting, lastRound)
   }
 
   // algokit's HTTP client takes no abort signal, so stop waiting for a block on shutdown instead.
@@ -282,6 +319,7 @@ async function main(signal: AbortSignal) {
       await sleep(Math.min(1000 * 2 ** pollFailures, 60_000), undefined, { signal }).catch(() => {})
     }
   }
+  await Promise.all(inFlight)
 }
 
 const controller = new AbortController()
@@ -291,7 +329,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
       logger.warn({ signal }, 'Second signal, exiting immediately')
       process.exit(1)
     }
-    logger.info({ signal }, 'Shutting down after the current poll')
+    logger.info({ signal }, 'Shutting down after in-flight transactions')
     controller.abort()
   })
 }
