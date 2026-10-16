@@ -5,7 +5,7 @@ import { AlgorandClient } from '@algorandfoundation/algokit-utils'
 import { init, keyPairFromSeed, prove, verify } from '@bwmx/algorand-vrf-utils-ts'
 import { spawnSync } from 'node:child_process'
 import { loadConfig } from './config'
-import { errorCode } from './logger'
+import { errorCode, failedIndex } from './logger'
 import { canProve, chunk, retryDelay, roundsToCheck } from './plan'
 
 const account = generateAccount()
@@ -62,6 +62,16 @@ test('errorCode extracts the innermost ARC-65 error quoted in algod details', ()
   assert.equal(errorCode(inner), 'ERR:Paused')
   assert.equal(errorCode(new Error('x opcodes=bytec 13 // "ERR:042:Bad thing"; log; err')), 'ERR:042:Bad thing')
   assert.equal(errorCode(new Error('logic eval error: assert failed pc=12')), undefined)
+})
+
+test('failedIndex reads the failing group index from algokit simulate errors, wrapped or not', () => {
+  const message = 'Error resolving execution info via simulate in transaction 3,1: transaction X: logic eval error'
+  assert.equal(failedIndex(new Error(message)), 3)
+  assert.equal(
+    failedIndex(Object.assign(new Error('Runtime error when executing Beacon'), { cause: new Error(message) })),
+    3,
+  )
+  assert.equal(failedIndex(new Error('Fees were too small to resolve execution info via simulate.')), undefined)
 })
 
 test('retryDelay doubles up to 64 rounds', () => {

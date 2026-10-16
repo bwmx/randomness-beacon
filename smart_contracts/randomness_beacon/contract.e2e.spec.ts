@@ -478,7 +478,12 @@ describe('RandomnessBeacon on LocalNet', () => {
       await rejecting.send.setRejectCallback({ args: { reject: false } })
       await algorand.send.payment({ sender: testAccount, receiver: manager.addr, amount: algos(0.2) })
       start()
-      await waitFor('Request completed')
+      // Only this daemon can complete `id`: wait for its own confirmation, so the outage below cannot interrupt it.
+      await expect
+        .poll(() => logs.some((log) => log.msg === 'Request completed' && String(log.requestId) === String(id)), {
+          timeout: 30_000,
+        })
+        .toBe(true)
       await expect.poll(() => rejecting.state.global.totalFulfilled(), { timeout: 15_000 }).toBe(1n)
       const { output } = prove(setup.keys.secretKey, await seed(round))
       expect((await rejecting.state.global.output()).asByteArray()).toEqual(
@@ -494,9 +499,13 @@ describe('RandomnessBeacon on LocalNet', () => {
       proxy.setOutage(false)
       await waitFor('Polling recovered')
       await expect.poll(() => setup.caller.state.global.totalFulfilled(), { timeout: 15_000 }).toBe(1n)
-      expect(
-        logs.filter((log) => log.msg === 'Request completed' && String(log.requestId) === String(nextId)),
-      ).toHaveLength(1)
+      // Sends confirm in the background, so the daemon may log completion just after the chain shows it.
+      await expect
+        .poll(
+          () =>
+            logs.filter((log) => log.msg === 'Request completed' && String(log.requestId) === String(nextId)).length,
+        )
+        .toBe(1)
 
       // Observe balance changes after startup, even when there are no pending requests.
       const balanceWarnings = logs.filter((log) => log.issue === 'balance' && log.level === 40).length

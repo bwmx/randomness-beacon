@@ -10,8 +10,9 @@ Serves a deployed [randomness beacon](../README.md). It wakes on every new block
   one failing callback fails its group, so those requests are then sent one by one.
 
 `ROLE=both` (the default) groups each proof with up to 15 of its round's fulfillments, so callbacks run in the
-block right after the target round. One failing callback fails the whole group, so it then submits the proof alone
-and fulfills the requests individually from the next block. To keep the key away from callback execution, run
+block right after the target round. One failing callback fails the whole group; simulation names it, so the daemon
+retries without that requester app's requests (or, if it cannot tell, sends the proof alone). Requests left out of
+the proof's group are sent as soon as the proof confirms, without waiting for the next poll. To keep the key away from callback execution, run
 `ROLE=watcher` on the key's host and `ROLE=keeper` elsewhere; callbacks then run one block later.
 
 **Status: development preview.** Do not operate this against production funds until the
@@ -20,7 +21,8 @@ are implemented, along with standalone release checks. Production-network valida
 remain release work.
 
 On each new block (or after algod's one-minute wait expires) it reads global state and the relayer's balance, then
-acts on pending requests in parallel. Boxes are read once and cached. Request boxes never change, so it lists them
+acts on pending requests in parallel. Sends run in the background, so confirming one never delays the next block,
+and the proof of the round that just committed is sent from the cached requests before anything is re-read. Boxes are read once and cached. Request boxes never change, so it lists them
 again only when `nextRequestId` or `totalPendingRequests` changes and reads only new ones. A proven round stays
 proven, and an unproven round's box is re-read only when the beacon's `totalProofs` counter changes. An idle block
 therefore costs two reads however many requests are pending. For `age = last committed round - target round`:
@@ -120,7 +122,7 @@ concurrent requests. The daemon checks the fixed 0.1 ALGO warning threshold each
 ### Linux (systemd)
 
 [`deploy/randomness-beacon.service`](deploy/randomness-beacon.service) runs the daemon as a `beacon` system user
-with a hardened sandbox, restarts it if it exits, and gives it 60 s to finish an in-flight poll on stop.
+with a hardened sandbox, restarts it if it exits, and gives it 60 s to finish in-flight transactions on stop.
 
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin beacon
@@ -187,7 +189,7 @@ truncating (`: > daemon.log`) rather than moving it.
 - **Capacity.** The default 128 pending requests are shared by every app. There is no admission control or
   per-app quota; long-lived or failing requests can monopolize capacity. Box reads scale with new requests and
   proofs rather than with capacity, but a burst still costs about four RPC calls per transaction group sent.
-- **Upgrading the daemon** is a rebuild and restart; SIGTERM lets the current poll finish, and a second signal
+- **Upgrading the daemon** is a rebuild and restart; SIGTERM lets in-flight transactions confirm, and a second signal
   exits immediately. The supplied deployer makes TestNet/MainNet contracts immutable; verify your deployment's
   settings as described in the [beacon README](../README.md).
 
