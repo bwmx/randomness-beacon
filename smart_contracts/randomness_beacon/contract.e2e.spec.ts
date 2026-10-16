@@ -478,7 +478,12 @@ describe('RandomnessBeacon on LocalNet', () => {
       await rejecting.send.setRejectCallback({ args: { reject: false } })
       await algorand.send.payment({ sender: testAccount, receiver: manager.addr, amount: algos(0.2) })
       start()
-      await waitFor('Request completed')
+      // Only this daemon can complete `id`: wait for its own confirmation, so the outage below cannot interrupt it.
+      await expect
+        .poll(() => logs.some((log) => log.msg === 'Request completed' && String(log.requestId) === String(id)), {
+          timeout: 30_000,
+        })
+        .toBe(true)
       await expect.poll(() => rejecting.state.global.totalFulfilled(), { timeout: 15_000 }).toBe(1n)
       const { output } = prove(setup.keys.secretKey, await seed(round))
       expect((await rejecting.state.global.output()).asByteArray()).toEqual(
