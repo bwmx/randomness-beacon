@@ -163,6 +163,16 @@ describe('RandomnessBeacon on LocalNet', () => {
     )
   }
 
+  /**
+   * A failed call's message and its causes. When an inner app call fails, algokit looks its failing pc up in the outer
+   * app's program; if that pc has an error message there, algokit reports it instead and keeps the original as cause.
+   */
+  function errorText(err: unknown): string {
+    return err instanceof Error ? `${err.message}\n${errorText((err as { cause?: unknown }).cause)}` : ''
+  }
+  /** Resolves with a call's error text, so an inner app's ARC-65 error can be matched whatever algokit reports. */
+  const failure = (call: Promise<unknown>) => call.then(() => 'call succeeded', errorText)
+
   type Log = {
     msg: string
     issue?: string
@@ -310,7 +320,7 @@ describe('RandomnessBeacon on LocalNet', () => {
       .getTypedAppFactory(ExampleCallerFactory, { defaultSender: testAccount.addr })
       .send.create.createApplication({ args: { beaconApp: beacon.appId } })
     await algorand.send.payment({ sender: testAccount, receiver: other.appAddress, amount: algos(0.1) })
-    await expect(request({ ...setup, caller: other }, testAccount.addr)).rejects.toThrow(/ERR:Paused/)
+    await expect(failure(request({ ...setup, caller: other }, testAccount.addr))).resolves.toMatch(/ERR:Paused/)
     await expect(fulfill(setup, id, { sender: relayer })).rejects.toThrow(/ERR:RoundNotProven/)
     await advancePast(round)
     const { proof } = prove(keys.secretKey, await seed(round))
@@ -399,13 +409,15 @@ describe('RandomnessBeacon on LocalNet', () => {
     expect(stored?.proofFee).toBe(PROOF_FEE)
     await advancePast(round)
     await expect(
-      setup.caller.send.expireRequest({
-        args: [],
-        populateAppCallResources: true,
-        coverAppCallInnerTransactionFees: true,
-        maxFee: algos(0.003),
-      }),
-    ).rejects.toThrow(/ERR:NotStale/)
+      failure(
+        setup.caller.send.expireRequest({
+          args: [],
+          populateAppCallResources: true,
+          coverAppCallInnerTransactionFees: true,
+          maxFee: algos(0.003),
+        }),
+      ),
+    ).resolves.toMatch(/ERR:NotStale/)
     expect(await setup.beacon.state.box.requests.value(id)).toEqual(stored)
     await submitProof(setup, round)
     await fulfill(setup, id)
@@ -430,7 +442,7 @@ describe('RandomnessBeacon on LocalNet', () => {
       batchCallers.push(appClient)
     }
     const [id, round] = await request({ ...setup, caller: rejecting }, testAccount.addr)
-    await expect(request(setup, testAccount.addr)).rejects.toThrow(/ERR:CapacityExhausted/)
+    await expect(failure(request(setup, testAccount.addr))).resolves.toMatch(/ERR:CapacityExhausted/)
     await advancePast(round)
     const before = await algorand.account.getInformation(setup.beacon.appAddress)
     const callerBalance = (await algorand.account.getInformation(rejecting.appAddress)).balance.microAlgo
@@ -556,13 +568,15 @@ describe('RandomnessBeacon on LocalNet', () => {
       ).toHaveLength(1)
       expect(logs.filter((log) => log.msg === 'Poll failed')).toHaveLength(pollErrors)
       await expect(
-        rejecting.send.expireRequest({
-          args: [],
-          populateAppCallResources: true,
-          coverAppCallInnerTransactionFees: true,
-          maxFee: algos(0.003),
-        }),
-      ).rejects.toThrow(/ERR:RoundProven/)
+        failure(
+          rejecting.send.expireRequest({
+            args: [],
+            populateAppCallResources: true,
+            coverAppCallInnerTransactionFees: true,
+            maxFee: algos(0.003),
+          }),
+        ),
+      ).resolves.toMatch(/ERR:RoundProven/)
       // Once the callback works, the daemon's retry (backed off at most 32 rounds by now) settles it.
       await rejecting.send.setRejectCallback({ args: { reject: false } })
       await advancePast(staleRound + 64n)
@@ -715,13 +729,15 @@ describe('RandomnessBeacon on LocalNet', () => {
     // Every outcome on the round is now public: a stale request must not be discarded by expiry.
     await advancePast(round + 2n)
     await expect(
-      setup.caller.send.expireRequest({
-        args: [],
-        populateAppCallResources: true,
-        coverAppCallInnerTransactionFees: true,
-        maxFee: algos(0.003),
-      }),
-    ).rejects.toThrow(/ERR:RoundProven/)
+      failure(
+        setup.caller.send.expireRequest({
+          args: [],
+          populateAppCallResources: true,
+          coverAppCallInnerTransactionFees: true,
+          maxFee: algos(0.003),
+        }),
+      ),
+    ).resolves.toMatch(/ERR:RoundProven/)
     for (const id of ids) await fulfill(setup, id)
     const { output } = prove(setup.keys.secretKey, await seed(round))
     const outputs = await Promise.all(callers.map(async (caller) => (await caller.state.global.output()).asByteArray()))
@@ -758,8 +774,10 @@ describe('RandomnessBeacon on LocalNet', () => {
     // Until its round is proven, the request is its requester app's to cancel.
     await expect(evict()).rejects.toThrow(/ERR:RoundNotProven/)
     await submitProof(setup, round)
-    await expect(fulfill(setup, id)).rejects.toThrow(/ERR:TestCallbackRejected/)
-    await expect(request({ ...setup, caller: other }, testAccount.addr)).rejects.toThrow(/ERR:CapacityExhausted/)
+    await expect(failure(fulfill(setup, id))).resolves.toMatch(/ERR:TestCallbackRejected/)
+    await expect(failure(request({ ...setup, caller: other }, testAccount.addr))).resolves.toMatch(
+      /ERR:CapacityExhausted/,
+    )
 
     // Stale once Global.round - round > timeout (5): the next block is round + 5 here, then round + 6.
     await advancePast(round + 3n)

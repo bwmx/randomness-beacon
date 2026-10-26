@@ -62,6 +62,11 @@ test('errorCode extracts the innermost ARC-65 error quoted in algod details', ()
   assert.equal(errorCode(inner), 'ERR:Paused')
   assert.equal(errorCode(new Error('x opcodes=bytec 13 // "ERR:042:Bad thing"; log; err')), 'ERR:042:Bad thing')
   assert.equal(errorCode(new Error('logic eval error: assert failed pc=12')), undefined)
+  // algokit can report the outer app's unrelated error message and keep the inner one as the cause
+  const wrapped = Object.assign(new Error('Runtime error when executing ExampleCaller: check GlobalState exists'), {
+    cause: inner,
+  })
+  assert.equal(errorCode(wrapped), 'ERR:Paused')
 })
 
 test('failedIndex reads the failing group index from algokit simulate errors, wrapped or not', () => {
