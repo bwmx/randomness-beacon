@@ -187,8 +187,9 @@ truncating (`: > daemon.log`) rather than moving it.
   insufficient fee budgets, and refund failures leave requests pending. Requests of unproven rounds must be expired
   through the requester app; the daemon does not do this for them.
 - **Capacity.** The default 128 pending requests are shared by every app. There is no admission control or
-  per-app quota; long-lived or failing requests can monopolize capacity. Box reads scale with new requests and
-  proofs rather than with capacity, but a burst still costs about four RPC calls per transaction group sent.
+  per-app quota; long-lived or failing requests hold capacity until they are evicted as stale with `evictRequest`
+  (the daemon does not evict). Box reads scale with new requests and proofs rather than with capacity, but a burst
+  still costs about four RPC calls per transaction group sent.
 - **Upgrading the daemon** is a rebuild and restart; SIGTERM lets in-flight transactions confirm, and a second signal
   exits immediately. The supplied deployer makes TestNet/MainNet contracts immutable; verify your deployment's
   settings as described in the [beacon README](../README.md).
@@ -201,7 +202,7 @@ truncating (`: > daemon.log`) rather than moving it.
 | `request:<id>` — aging                            | At least half the smaller of the cancellation timeout and the 991-round seed-window cutoff has elapsed (rounded down, minimum age 1). Investigate proof submission or expiry.  |
 | `request:<id>` — can be cancelled                 | Cancellation is eligible because the round is unproven; proof attempts continue while the seed is readable. Use the requester app's expiry method if cancellation is intended. |
 | `request:<id>` — cannot be served                 | The seed-window cutoff has been reached unproven. Use the requester's expiry method once the round exceeds `expiryAfterRound`.                                                 |
-| `request:<id>` — callback failing                 | The round is proven, so the request can no longer be cancelled. Fix the requester's callback or fee budget; only fulfillment settles it.                                       |
+| `request:<id>` — callback failing                 | The round is proven, so the request can no longer be cancelled. Fix the requester's callback or fee budget; once stale, anyone can evict it with `evictRequest` instead.       |
 | `Proof failed` / `Request failed` / `Poll failed` | Inspect the round or request ID, attempt, and error. Repair key/requester/funding issues or restore RPC connectivity; watch for success or `Polling recovered`.                |
 
 Also monitor service/process availability externally: a stopped process cannot report its own failure. Health

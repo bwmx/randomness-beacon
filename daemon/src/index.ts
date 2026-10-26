@@ -272,7 +272,7 @@ async function main(signal: AbortSignal) {
         `request:${requestId}`,
         age > 0n && age >= warningWindow / 2n,
         proven.has(request.round)
-          ? 'Request callback is failing; its round is proven, so only fulfillment can settle it'
+          ? 'Request callback is failing; its round is proven, so it can only be fulfilled or, once stale, evicted'
           : age >= MAX_SEED_AGE
             ? 'Request cannot be served; invoke requester-app expiry when eligible'
             : age > staleTimeout

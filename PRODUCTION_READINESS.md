@@ -31,7 +31,8 @@ callback execution. Proofs use `FirstValid = last round + 1`, so they land at ta
 In `both` mode, fulfillments are grouped with the proof. Same-round requests, the target + 1 landing, distinct
 outputs, exact deposit/fee accounting, rejected expiry after proof, and a split watcher/keeper pair are covered on
 LocalNet. Grouped delivery on a network with real block times, rather than dev-mode LocalNet, is not yet exercised.
-A requester whose callback always fails now holds its proven request and capacity slot permanently.
+A requester whose callback always fails holds its proven request and capacity slot until anyone evicts it with
+`evictRequest` once `staleRequestTimeout` has passed; the beacon keeps its deposit and fees.
 
 The default capacity is now 128. Each block, the daemon reads only global state and its balance. It reads request
 boxes once, and re-reads unproven rounds only when the new `totalProofs` counter changes; LocalNet verifies zero box

@@ -375,6 +375,35 @@ describe('RandomnessBeacon contract', () => {
     expect(BigInt(beaconContract.totalPendingRequests.value)).toBe(0n)
   })
 
+  it('anyone may evict a proven request once stale', () => {
+    const { beaconContract } = deploy(5, 100, 10)
+    beaconContract.requests(1).value = {
+      createdAt: 1,
+      requesterAppId: ctx.any.application().id,
+      requesterAddress: new arc4.Address(ctx.any.account()),
+      round: 2,
+      costs: { fees: 14_000, boxMbr: 84_200 },
+      proofFee: 10_000,
+    }
+    beaconContract.rounds(2).value = { pending: 1, proofFees: 10_000, proofCost: 0, output: roundOutput(0) }
+    beaconContract.totalPendingRequests.value = 1
+    ctx.defaultSender = ctx.any.account()
+    ctx.ledger.patchGlobalData({ round: 100 })
+    // an unproven request is its requester app's to cancel
+    expect(() => beaconContract.evictRequest(1)).toThrow('ERR:RoundNotProven')
+    beaconContract.rounds(2).value = { pending: 1, proofFees: 10_000, proofCost: 2_000, output: roundOutput(7) }
+    for (const round of [3, 12]) {
+      ctx.ledger.patchGlobalData({ round })
+      expect(() => beaconContract.evictRequest(1)).toThrow('ERR:NotStale')
+    }
+    ctx.ledger.patchGlobalData({ round: 13 })
+    beaconContract.evictRequest(1)
+    expect(beaconContract.requests(1).exists).toBe(false)
+    expect(beaconContract.rounds(2).exists).toBe(false)
+    expect(BigInt(beaconContract.totalPendingRequests.value)).toBe(0n)
+    expect(() => beaconContract.evictRequest(1)).toThrow('ERR:UnknownRequest')
+  })
+
   it('example rejects unknown, mismatched, and replayed callbacks and validates payment fields', () => {
     const { beaconApp } = deploy(5, 100, 10)
     const example = ctx.contract.create(ExampleCaller)

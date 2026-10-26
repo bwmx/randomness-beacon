@@ -46,14 +46,17 @@ import {
   NOTE_CLOSE_OUT_REMAINDER,
   NOTE_FEES_PAYMENT,
   NOTE_PROOF_FEES_PAYMENT,
+  Randomness,
   RandomnessBeaconRequesterStub,
   RandomnessRequest,
   RandomnessRequestCosts,
   RequestCancelled,
   RequestCreated,
+  RequestEvicted,
   RequestFulfilled,
   RoundProven,
   RoundState,
+  VrfOutput,
   VrfProof,
   VrfPublicKey,
 } from './types.algo'
@@ -128,6 +131,17 @@ export class RandomnessBeacon extends classes(Managable, Pausable) implements ar
         output: state.output,
       }
     }
+  }
+
+  /** Binds the shared round output to one request; every input is fixed when the request is created. */
+  private _randomness(requestId: uint64, request: RandomnessRequest, output: VrfOutput): Randomness {
+    return op.sha256(
+      output
+        .concat(op.itob(Global.currentApplicationId.id))
+        .concat(op.itob(requestId))
+        .concat(op.itob(request.requesterAppId))
+        .concat(request.requesterAddress.bytes),
+    )
   }
 
   /**
@@ -371,14 +385,7 @@ export class RandomnessBeacon extends classes(Managable, Pausable) implements ar
     loggedAssert(output !== op.bzero(64), ERR_ROUND_NOT_PROVEN)
     // this request's share of the proof fees its round prepaid but did not spend
     const proofRefund: uint64 = (request.proofFee * (state.proofFees - state.proofCost)) / state.proofFees
-    // Bind the shared round output to this request; every input is fixed when the request is created.
-    const randomness = op.sha256(
-      output
-        .concat(op.itob(Global.currentApplicationId.id))
-        .concat(op.itob(requestId))
-        .concat(op.itob(request.requesterAppId))
-        .concat(request.requesterAddress.bytes),
-    )
+    const randomness = this._randomness(requestId, request, output)
 
     arc4.abiCall<typeof RandomnessBeaconRequesterStub.prototype.fulfillRandomness>({
       appId: request.requesterAppId,
@@ -413,6 +420,34 @@ export class RandomnessBeacon extends classes(Managable, Pausable) implements ar
       requesterAppId: request.requesterAppId,
       requesterAddress: request.requesterAddress,
       randomness: randomness,
+    })
+  }
+
+  /**
+   * Frees a proven request whose callback has not succeeded within the stale timeout, so a failing or deleted
+   * requester app cannot hold a capacity slot forever. Anyone may call it. Nothing is paid out: the request's
+   * deposit and fees stay with the beacon, so evicting never pays more than fulfilling. The requester app is not
+   * notified; the event records the randomness its callback would have received.
+   * @param requestId the ID of the VRF request
+   */
+  public evictRequest(requestId: uint64): void {
+    loggedAssert(this.requests(requestId).exists, ERR_UNKNOWN_REQUEST)
+    const request = clone(this.requests(requestId).value)
+    const output = this.rounds(request.round).value.output
+    // unproven requests stay the requester app's to cancel, so eviction cannot race its expiry path
+    loggedAssert(output !== op.bzero(64), ERR_ROUND_NOT_PROVEN)
+    loggedAssert(
+      Global.round > request.round && Global.round - request.round > this.staleRequestTimeout.value,
+      ERR_NOT_STALE,
+    )
+
+    // the round's other requests keep their full share of its unspent proof fees
+    this._deleteRequest(requestId, request.round, 0)
+    emit<RequestEvicted>({
+      requestId,
+      requesterAppId: request.requesterAppId,
+      requesterAddress: request.requesterAddress,
+      randomness: this._randomness(requestId, request, output),
     })
   }
 

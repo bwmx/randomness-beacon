@@ -37,9 +37,11 @@ IDs; do not update a live beacon underneath old requesters.
   which request gets which. Once the round's proof is posted, anyone can compute every value on that round. This does
   not mitigate withholding or an insufficient target-round delay.
 - **Proven requests cannot be cancelled.** Because a proven round's outcomes are public, `cancelRequest` rejects its
-  requests: they can only be fulfilled, so nobody can discard an unwanted outcome through expiry. A callback that
-  always fails therefore keeps its request, and a capacity slot, forever. As with Chainlink VRF, `fulfillRandomness`
-  must not revert.
+  requests: they can only be fulfilled, so nobody can discard an unwanted outcome through expiry. As with Chainlink
+  VRF, `fulfillRandomness` must not revert: once `staleRequestTimeout` has passed, anyone can evict a proven request
+  whose callback has not succeeded (`evictRequest`). The beacon keeps its deposit and fees, and the requester app is
+  not notified, so a failing, deleted, or malicious requester cannot hold a capacity slot forever. Deploy a new
+  beacon to enable eviction.
 - **Withholding needs an application policy.** The beacon offers cancellation eligibility, not guaranteed delivery
   or automatic compensation. The casino awards its maximum payout through permissionless `expireBet`; only the
   casino app can cancel its own beacon request.
@@ -78,7 +80,12 @@ IDs; do not update a live beacon underneath old requesters.
    `RequestCancelled`, deletes the request, and returns the refund amount. There is no cancellation fee rebate;
    the outer caller funds the transaction group. Integrators should expose a permissionless expiry method that
    cancels and settles their own state atomically. The daemon never cancels requests.
-5. The requester app holds user refunds for a separate authenticated claim. Fulfillment and expiry make no
+5. Once `Global.round > round + staleRequestTimeout`, and **only once the round is proven**, anyone can call
+   `evictRequest(requestId)`. It deletes the request without calling the requester app, pays nothing out (the
+   deposit and fees stay with the beacon, so evicting never pays more than fulfilling), and emits `RequestEvicted`
+   with the randomness the callback would have received. The round's other requests keep their full share of its
+   unspent proof fees. A requester app whose request was evicted can no longer cancel it.
+6. The requester app holds user refunds for a separate authenticated claim. Fulfillment and expiry make no
    payment to the user, so closing a user account does not block them. A failed claim can be retried using a
    suitable receiver without recreating a pending beacon request.
 
@@ -134,28 +141,28 @@ Every beacon failure logs an [ARC-65](https://arc.algorand.foundation/ARCs/arc-0
 failing; algod returns it in the failed call's logs, and its error details quote it. Requester apps that call the
 beacon in inner transactions see the same codes.
 
-| Code                                                                | Raised by                                      | Meaning                                                      |
-| ------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------ |
-| `Paused`                                                            | `createRequest`                                | New requests are paused                                      |
-| `CapacityExhausted`                                                 | `createRequest`                                | `maxPendingRequests` requests are already pending            |
-| `RoundNotFuture`                                                    | `createRequest`                                | The target round is not after the current round              |
-| `RoundTooFar`                                                       | `createRequest`                                | The target round is more than `maxFutureRounds` ahead        |
-| `CallerNotApp`                                                      | `createRequest`                                | Called by an account rather than an application              |
-| `InvalidPayment`                                                    | `createRequest`                                | The payment is not to the beacon or is below `getCosts()`    |
-| `UnknownRequest`                                                    | `fulfillRequest`, `cancelRequest`              | No pending request has this ID                               |
-| `NotRequesterApp`                                                   | `cancelRequest`                                | The caller is not the app that created the request           |
-| `NotStale`                                                          | `cancelRequest`                                | `staleRequestTimeout` has not elapsed since the target round |
-| `RoundProven`                                                       | `submitProof`, `cancelRequest`                 | The round is already proven                                  |
-| `RoundNotProven`                                                    | `fulfillRequest`                               | The request's round has no proof yet                         |
-| `NoRequestsForRound`                                                | `submitProof`                                  | No pending request targets this round                        |
-| `SeedUnavailable`                                                   | `submitProof`                                  | The round is outside `LastValid - 1002 < round < FirstValid` |
-| `InvalidProof`                                                      | `submitProof`                                  | The proof does not verify against the seed and public key    |
-| `NotManager`                                                        | manager methods, `updateApplication`, deletion | The sender is not the manager                                |
-| `NotPauser`                                                         | `pause`, `unpause`, `updatePauser`             | The sender is not the pauser                                 |
-| `ZeroAddress`                                                       | `updateManager`, `updatePauser`                | The new role holder is the zero address                      |
-| `NotUpdatable`                                                      | `updateApplication`                            | The deployment was made immutable                            |
-| `RequestsPending`                                                   | app deletion                                   | Requests are still pending                                   |
-| `ZeroMaxPendingRequests`, `ZeroMaxFutureRounds`, `ZeroStaleTimeout` | creation                                       | A limit was set to zero                                      |
+| Code                                                                | Raised by                                         | Meaning                                                      |
+| ------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------ |
+| `Paused`                                                            | `createRequest`                                   | New requests are paused                                      |
+| `CapacityExhausted`                                                 | `createRequest`                                   | `maxPendingRequests` requests are already pending            |
+| `RoundNotFuture`                                                    | `createRequest`                                   | The target round is not after the current round              |
+| `RoundTooFar`                                                       | `createRequest`                                   | The target round is more than `maxFutureRounds` ahead        |
+| `CallerNotApp`                                                      | `createRequest`                                   | Called by an account rather than an application              |
+| `InvalidPayment`                                                    | `createRequest`                                   | The payment is not to the beacon or is below `getCosts()`    |
+| `UnknownRequest`                                                    | `fulfillRequest`, `cancelRequest`, `evictRequest` | No pending request has this ID                               |
+| `NotRequesterApp`                                                   | `cancelRequest`                                   | The caller is not the app that created the request           |
+| `NotStale`                                                          | `cancelRequest`, `evictRequest`                   | `staleRequestTimeout` has not elapsed since the target round |
+| `RoundProven`                                                       | `submitProof`, `cancelRequest`                    | The round is already proven                                  |
+| `RoundNotProven`                                                    | `fulfillRequest`, `evictRequest`                  | The request's round has no proof yet                         |
+| `NoRequestsForRound`                                                | `submitProof`                                     | No pending request targets this round                        |
+| `SeedUnavailable`                                                   | `submitProof`                                     | The round is outside `LastValid - 1002 < round < FirstValid` |
+| `InvalidProof`                                                      | `submitProof`                                     | The proof does not verify against the seed and public key    |
+| `NotManager`                                                        | manager methods, `updateApplication`, deletion    | The sender is not the manager                                |
+| `NotPauser`                                                         | `pause`, `unpause`, `updatePauser`                | The sender is not the pauser                                 |
+| `ZeroAddress`                                                       | `updateManager`, `updatePauser`                   | The new role holder is the zero address                      |
+| `NotUpdatable`                                                      | `updateApplication`                               | The deployment was made immutable                            |
+| `RequestsPending`                                                   | app deletion                                      | Requests are still pending                                   |
+| `ZeroMaxPendingRequests`, `ZeroMaxFutureRounds`, `ZeroStaleTimeout` | creation                                          | A limit was set to zero                                      |
 
 Router-level failures (unknown method, malformed arguments) and AVM failures such as insufficient fees or opcode
 budget are not ARC-65 errors.
@@ -236,8 +243,9 @@ See [daemon setup](daemon/README.md) to operate one.
 ## Remaining limitations
 
 - Requester apps must expose a working expiry path, remain available/funded, and accept their callbacks. A broken,
-  deleted, or malicious requester can still occupy pending capacity, permanently once its round is proven. This
-  permissionless beacon has no admission control or per-app quota.
+  deleted, or malicious requester can occupy pending capacity until its round is proven and its request is evicted
+  as stale. An unproven request whose seed is no longer readable can still only be cancelled by its requester app.
+  This permissionless beacon has no admission control or per-app quota.
 - Claims require the original user to authorize them and a receiver able to accept the payment. A closed user
   account may need funding for the claim transaction; this no longer blocks beacon settlement or capacity recovery.
 - TestNet soak testing, service installation/reboot checks, operator alert delivery, and an independent security

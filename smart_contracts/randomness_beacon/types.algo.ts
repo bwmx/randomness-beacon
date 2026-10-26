@@ -207,6 +207,28 @@ export type RequestFulfilled = {
 }
 
 /**
+ * Event emitted when a stale proven request is evicted without its callback succeeding
+ */
+export type RequestEvicted = {
+  /**
+   * the unique ID of the request
+   */
+  requestId: uint64
+  /**
+   * the application ID of the contract making the VRF request
+   */
+  requesterAppId: uint64
+  /**
+   * the address of the account making the VRF request, not the app address
+   */
+  requesterAddress: arc4.Address
+  /**
+   * the randomness the requester app's callback would have received
+   */
+  randomness: Randomness
+}
+
+/**
  * A stub class representing the interface of the caller contract that will receive the VRF output
  * only fulfillRandomness is required
  */

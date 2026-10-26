@@ -740,6 +740,58 @@ describe('RandomnessBeacon on LocalNet', () => {
     }
   })
 
+  test('anyone can evict a stale proven request whose callback fails, freeing its slot', async () => {
+    const setup = await deploy(5n, 2n)
+    const { algorand, testAccount, generateAccount } = localnet.context
+    const evictor = await generateAccount({ initialFunds: algos(1) })
+    const { appClient: rejecting } = await algorand.client
+      .getTypedAppFactory(RejectingCallerFactory, { defaultSender: testAccount.addr })
+      .send.create.createApplication({ args: { beaconApp: setup.beacon.appId } })
+    await algorand.send.payment({ sender: testAccount, receiver: rejecting.appAddress, amount: algos(0.1) })
+    const other = await newCaller(setup)
+    const {
+      ids: [id, goodId],
+      round,
+    } = await requestTogether(setup, [rejecting, setup.caller])
+    const evict = () =>
+      setup.beacon.send.evictRequest({ sender: evictor, args: { requestId: id }, populateAppCallResources: true })
+    // Until its round is proven, the request is its requester app's to cancel.
+    await expect(evict()).rejects.toThrow(/ERR:RoundNotProven/)
+    await submitProof(setup, round)
+    await expect(fulfill(setup, id)).rejects.toThrow(/ERR:TestCallbackRejected/)
+    await expect(request({ ...setup, caller: other }, testAccount.addr)).rejects.toThrow(/ERR:CapacityExhausted/)
+
+    // Stale once Global.round - round > timeout (5): the next block is round + 5 here, then round + 6.
+    await advancePast(round + 3n)
+    await expect(evict()).rejects.toThrow(/ERR:NotStale/)
+    await advancePast(round + 4n)
+    const balances = () =>
+      Promise.all(
+        [setup.beacon.appAddress, rejecting.appAddress, evictor.addr].map(
+          async (address) => (await algorand.account.getInformation(address)).balance.microAlgo,
+        ),
+      )
+    const [beaconBefore, rejectingBefore, evictorBefore] = await balances()
+    const evicted = await evict()
+    // Nothing is paid out: the beacon keeps the deposit and fees, and the evictor pays only its own fee.
+    expect(await balances()).toEqual([beaconBefore, rejectingBefore, evictorBefore - 1_000n])
+    // The event records the randomness the callback would have received.
+    const { output } = prove(setup.keys.secretKey, await seed(round))
+    const logs = evicted.confirmation.logs!
+    expect(logs[logs.length - 1].slice(-32)).toEqual(randomness(setup, output, id, rejecting.appId, testAccount.addr))
+    await expect(fulfill(setup, id)).rejects.toThrow(/ERR:UnknownRequest/)
+
+    // The round's other request still gets its full share of the unspent proof fee.
+    await fulfill(setup, goodId)
+    expect((await algorand.account.getInformation(setup.caller.appAddress)).balance.microAlgo).toBe(
+      100_000n + setup.costs.boxMbr + PROOF_FEE / 2n,
+    )
+    expect((await setup.beacon.state.box.rounds.getMap()).size).toBe(0)
+    // The freed slot takes a new request.
+    await request({ ...setup, caller: other }, testAccount.addr)
+    expect(await setup.beacon.state.global.totalPendingRequests()).toBe(1n)
+  })
+
   test('creates the configured immutable beacon and an accounted pending request', async () => {
     const setup = await deploy()
     const [id, round] = await request(setup, localnet.context.testAccount.addr)
